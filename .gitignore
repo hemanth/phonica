@@ -4,4 +4,9 @@ dist
 .env.*
 *.mp4
 demo.mp4
+audio/
+*.wav
+*.mp3
+generate_voiceover.py
+master_audio.py
 .DS_Store
