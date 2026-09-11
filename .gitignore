@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.env.*
+*.mp4
+demo.mp4
+.DS_Store
