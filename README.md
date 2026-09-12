@@ -1,6 +1,11 @@
 # phonica
+> Practice wild, random words across 22 languages with real-time acoustic voice coaching.
 
-Practice wild, random words across 22 languages with real-time acoustic voice coaching.
+
+
+https://github.com/user-attachments/assets/e0b1dfae-7b3f-4873-b8e8-024e41ef6e96
+
+
 
 ```bash
 npm install
