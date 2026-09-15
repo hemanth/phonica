@@ -15,6 +15,8 @@ export class GeminiLiveClient {
   private ws: WebSocket | null = null;
   private audioCtx: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
+  private workletNode: AudioWorkletNode | null = null;
+  private silentGain: GainNode | null = null;
   private scriptProcessor: ScriptProcessorNode | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private outputAudioTime: number = 0;
@@ -154,13 +156,8 @@ Keep responses concise, conversational, and rhythmically spoken.`
 
       this.sourceNode = this.audioCtx.createMediaStreamSource(this.mediaStream);
       
-      // Buffer size 2048 at 16kHz = ~128ms chunks
-      this.scriptProcessor = this.audioCtx.createScriptProcessor(2048, 1, 1);
-
-      this.scriptProcessor.onaudioprocess = (e) => {
+      const processAudioChunk = (inputData: Float32Array) => {
         if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-        const inputData = e.inputBuffer.getChannelData(0);
 
         // Calculate audio RMS for visualizer
         let sum = 0;
@@ -200,8 +197,59 @@ Keep responses concise, conversational, and rhythmically spoken.`
         this.ws.send(JSON.stringify(realTimeMessage));
       };
 
-      this.sourceNode.connect(this.scriptProcessor);
-      this.scriptProcessor.connect(this.audioCtx.destination);
+      if (this.audioCtx.audioWorklet) {
+        const workletCode = `
+class GeminiAudioProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.bufferSize = 2048;
+    this.buffer = new Float32Array(this.bufferSize);
+    this.bytesWritten = 0;
+  }
+
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || !input[0]) return true;
+    const channel = input[0];
+
+    for (let i = 0; i < channel.length; i++) {
+      this.buffer[this.bytesWritten++] = channel[i];
+      if (this.bytesWritten >= this.bufferSize) {
+        this.port.postMessage(this.buffer.slice(0, this.bufferSize));
+        this.bytesWritten = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
+`;
+        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const workletUrl = URL.createObjectURL(blob);
+        await this.audioCtx.audioWorklet.addModule(workletUrl);
+        URL.revokeObjectURL(workletUrl);
+
+        this.workletNode = new AudioWorkletNode(this.audioCtx, 'gemini-audio-processor');
+        this.workletNode.port.onmessage = (event) => {
+          processAudioChunk(event.data);
+        };
+
+        this.silentGain = this.audioCtx.createGain();
+        this.silentGain.gain.value = 0;
+
+        this.sourceNode.connect(this.workletNode);
+        this.workletNode.connect(this.silentGain);
+        this.silentGain.connect(this.audioCtx.destination);
+      } else {
+        // Fallback for legacy browser environments without AudioWorklet
+        this.scriptProcessor = this.audioCtx.createScriptProcessor(2048, 1, 1);
+        this.scriptProcessor.onaudioprocess = (e) => {
+          processAudioChunk(e.inputBuffer.getChannelData(0));
+        };
+        this.sourceNode.connect(this.scriptProcessor);
+        this.scriptProcessor.connect(this.audioCtx.destination);
+      }
+
       this.options.onStatusChange?.('listening');
 
     } catch (err: any) {
@@ -290,6 +338,14 @@ Keep responses concise, conversational, and rhythmically spoken.`
   }
 
   private cleanupAudio() {
+    if (this.workletNode) {
+      this.workletNode.disconnect();
+      this.workletNode = null;
+    }
+    if (this.silentGain) {
+      this.silentGain.disconnect();
+      this.silentGain = null;
+    }
     if (this.scriptProcessor) {
       this.scriptProcessor.disconnect();
       this.scriptProcessor = null;
