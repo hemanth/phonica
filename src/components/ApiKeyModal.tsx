@@ -222,7 +222,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               >
                 <option value="models/gemini-3.8-live">Gemini 3.8 Live (Fast &amp; Fluid)</option>
                 <option value="models/gemini-3.8-live-extended-thinking">Gemini 3.8 Live Extended Thinking</option>
-                <option value="models/gemini-2.0-flash-exp">Gemini 2.0 Flash (Legacy)</option>
+                <option value="models/gemini-2.5-flash">Gemini 2.5 Flash</option>
               </select>
             </div>
           </div>

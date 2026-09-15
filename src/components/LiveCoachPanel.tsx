@@ -20,6 +20,7 @@ interface LiveCoachPanelProps {
   currentWord: WordItem;
   hasKey: boolean;
   coachingLanguage: string;
+  geminiModel?: string;
   onSelectCoachingLanguage: (langId: string) => void;
   onToggleEngine: (engine: LiveEngine) => void;
   onToggleLiveConnection: () => void;
@@ -36,6 +37,7 @@ export const LiveCoachPanel: React.FC<LiveCoachPanelProps> = ({
   currentWord,
   hasKey,
   coachingLanguage,
+  geminiModel,
   onSelectCoachingLanguage,
   onToggleEngine,
   onToggleLiveConnection,
@@ -237,7 +239,11 @@ export const LiveCoachPanel: React.FC<LiveCoachPanelProps> = ({
           </div>
 
           <span className="text-[10px] text-neutral-400 font-mono font-medium">
-            {engine === 'gemini' ? 'Gemini 2.0' : engine === 'openai' ? 'GPT-Live-1' : 'Web Audio'}
+            {engine === 'gemini' 
+              ? (geminiModel?.includes('extended-thinking') ? 'Gemini 3.8 Thinking' : 'Gemini 3.8 Live') 
+              : engine === 'openai' 
+              ? 'GPT-Live-1' 
+              : 'Web Audio'}
           </span>
         </div>
       </div>

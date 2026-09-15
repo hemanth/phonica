@@ -906,6 +906,7 @@ export const App: React.FC = () => {
                       currentWord={currentWord}
                       hasKey={engine === 'gemini' ? Boolean(geminiKey) : engine === 'openai' ? Boolean(openAIKey) : true}
                       coachingLanguage={coachingLanguage}
+                      geminiModel={geminiModel}
                       onSelectCoachingLanguage={(langId) => {
                         setCoachingLanguage(langId);
                         localStorage.setItem('coaching_language', langId);
