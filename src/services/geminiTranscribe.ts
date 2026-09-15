@@ -22,11 +22,11 @@ export class GeminiTranscribeService {
       binary += String.fromCharCode(bytes[i]);
     }
     const base64Audio = btoa(binary);
-    const mimeType = audioBlob.type || 'audio/webm';
+    const mimeType = (audioBlob.type || 'audio/webm').split(';')[0];
 
-    // Model selection: gemini-3.5-transcribe with fallback to gemini-2.0-flash-exp
-    const primaryModel = 'gemini-3.5-transcribe';
-    const fallbackModel = 'gemini-2.0-flash-exp';
+    // Model selection: gemini-3.8-flash with fallback to gemini-2.5-flash
+    const primaryModel = 'gemini-3.8-flash';
+    const fallbackModel = 'gemini-2.5-flash';
 
     const prompt = `You are the Google Gemini Transcribe engine specialized in verbatim speech-to-text and acoustic pronunciation analysis.
 The speaker is attempting to pronounce the word "${target.word}" in ${language.name} (IPA: ${target.ipa}, Syllables: ${target.syllables.join('-')}).

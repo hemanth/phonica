@@ -639,7 +639,7 @@ export const App: React.FC = () => {
                 openAIKey
               );
             } else {
-              modelLabel = 'Gemini 3.5 Transcribe';
+              modelLabel = 'Gemini 3.8 Flash';
               evalScore = await GeminiTranscribeService.evaluateWithGeminiTranscribe(
                 blob,
                 currentWord,
