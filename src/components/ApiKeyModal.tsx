@@ -17,8 +17,9 @@ interface ApiKeyModalProps {
   openAIKey: string;
   geminiVoice: string;
   openAIVoice: string;
-  onSaveKeys?: (geminiKey: string, openAIKey: string, geminiVoice: string, openAIVoice: string) => void;
-  onSave?: (geminiKey: string, openAIKey: string, geminiVoice: string, openAIVoice: string) => void;
+  geminiModel?: string;
+  onSaveKeys?: (geminiKey: string, openAIKey: string, geminiVoice: string, openAIVoice: string, geminiModel?: string) => void;
+  onSave?: (geminiKey: string, openAIKey: string, geminiVoice: string, openAIVoice: string, geminiModel?: string) => void;
 }
 
 export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
@@ -28,6 +29,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   openAIKey,
   geminiVoice,
   openAIVoice,
+  geminiModel,
   onSaveKeys,
   onSave
 }) => {
@@ -35,6 +37,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   const [oaKey, setOaKey] = useState(openAIKey);
   const [gVoice, setGVoice] = useState(geminiVoice);
   const [oVoice, setOVoice] = useState(openAIVoice);
+  const [gModel, setGModel] = useState(geminiModel || 'models/gemini-3.8-live');
   const [showGKey, setShowGKey] = useState(false);
   const [showOaKey, setShowOaKey] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -44,7 +47,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const saveFn = onSaveKeys || onSave;
-    saveFn?.(gKey.trim(), oaKey.trim(), gVoice, oVoice);
+    saveFn?.(gKey.trim(), oaKey.trim(), gVoice, oVoice, gModel);
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -206,6 +209,20 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 <option value="Kore">Kore (Warm &amp; Natural)</option>
                 <option value="Fenrir">Fenrir (Authoritative)</option>
                 <option value="Aoede">Aoede (Melodic)</option>
+              </select>
+            </div>
+
+            {/* Gemini Live Model Selector */}
+            <div className="flex items-center justify-between text-xs pt-0.5">
+              <span className="text-neutral-600 font-medium font-mono text-[11px]">Live Model:</span>
+              <select
+                value={gModel}
+                onChange={e => setGModel(e.target.value)}
+                className="bg-white border border-neutral-200/90 text-[#0A0A0A] text-xs font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-neutral-900 cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.04)] max-w-[210px] truncate"
+              >
+                <option value="models/gemini-3.8-live">Gemini 3.8 Live (Fast &amp; Fluid)</option>
+                <option value="models/gemini-3.8-live-extended-thinking">Gemini 3.8 Live Extended Thinking</option>
+                <option value="models/gemini-2.0-flash-exp">Gemini 2.0 Flash (Legacy)</option>
               </select>
             </div>
           </div>

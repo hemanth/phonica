@@ -431,7 +431,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Bidirectional Conversational Streaming
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed font-sans max-w-lg">
-                  Direct peer-to-peer WebRTC SDP negotiation with OpenAI <code className="font-mono text-[11px] bg-slate-800 text-slate-200 px-1 py-0.5 rounded">gpt-live-1</code> and Google Gemini Live. Interrupt naturally, repeat phonemes mid-stride, and experience sub-250ms conversational turnaround without push-to-talk delays.
+                  Direct peer-to-peer WebRTC SDP negotiation with OpenAI <code className="font-mono text-[11px] bg-slate-800 text-slate-200 px-1 py-0.5 rounded">gpt-live-1</code> and Google Gemini 3.8 Live. Interrupt naturally, repeat phonemes mid-stride, and experience sub-250ms conversational turnaround without push-to-talk delays.
                 </p>
               </div>
 
@@ -707,7 +707,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <div className="w-8 h-8 rounded-xl bg-neutral-900 text-white flex items-center justify-center">
                     <Cpu size={16} weight="bold" />
                   </div>
-                  <span className="font-bold font-display text-neutral-900">Google Gemini Live</span>
+                  <span className="font-bold font-display text-neutral-900">Google Gemini 3.8 Live</span>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-800 font-semibold uppercase">
                   WebSocket Stream
@@ -715,13 +715,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
 
               <p className="text-xs text-neutral-600 leading-relaxed font-sans">
-                Streaming multimodal WebSocket connection to Gemini 2.0 Flash Live with 24kHz audio. Multi-lingual phonology support across Indian, East Asian, and European linguistic families.
+                Streaming multimodal WebSocket connection to Gemini 3.8 Live and 3.8 Live Extended Thinking with 24kHz audio. Near real-time reasoning and multi-lingual phonology across Indian, East Asian, and European linguistic families.
               </p>
 
               <div className="pt-1 text-xs font-mono text-neutral-700 space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <Check size={13} weight="bold" className="text-neutral-900" />
-                  <span>Multilingual Phonetic Awareness</span>
+                  <span>Fluid Dialogue &amp; Extended Thinking</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Check size={13} weight="bold" className="text-neutral-900" />

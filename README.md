@@ -21,7 +21,7 @@ Runs the studio at `http://localhost:5180`. Connect your microphone, pick any la
 
 ## Live voice coaching
 
-Full-duplex audio over WebRTC (OpenAI `gpt-live-1`) or WebSocket (Gemini Multimodal Live).
+Full-duplex audio over WebRTC (OpenAI `gpt-live-1`) or WebSocket (Google `gemini-3.8-live` and `gemini-3.8-live-extended-thinking`).
 
 ```js
 import { OpenAILiveClient } from './src/services/openaiLive';

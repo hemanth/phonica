@@ -2,6 +2,7 @@ import { LiveStatus } from '../types';
 
 export interface GeminiLiveOptions {
   apiKey: string;
+  model?: string;
   voiceName?: string;
   coachingLanguage?: string;
   onStatusChange?: (status: LiveStatus) => void;
@@ -40,10 +41,11 @@ export class GeminiLiveClient {
         this.isConnected = true;
         this.options.onStatusChange?.('connected');
 
-        // Send Setup frame
+        // Send Setup frame for Gemini 3.8 Live
+        const targetModel = this.options.model || 'models/gemini-3.8-live';
         const setupMessage = {
           setup: {
-            model: 'models/gemini-2.0-flash-exp',
+            model: targetModel,
             generationConfig: {
               responseModalities: ['AUDIO'],
               speechConfig: {
@@ -108,7 +110,7 @@ Keep responses concise, conversational, and rhythmically spoken.`
             }
           }
 
-          if (data.serverContent?.turnComplete) {
+          if (data.serverContent?.turnComplete || data.serverContent?.interrupted || data.serverContent?.interaction_status === 'IDLE') {
             this.options.onStatusChange?.('listening');
           }
         } catch (e: any) {

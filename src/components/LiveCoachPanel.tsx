@@ -180,8 +180,8 @@ export const LiveCoachPanel: React.FC<LiveCoachPanelProps> = ({
                 : 'text-neutral-600 hover:text-neutral-900 font-medium'
             }`}
           >
-            <div className="truncate">Gemini Live</div>
-            <div className="text-[9px] font-mono tracking-wider opacity-60">WebSocket</div>
+            <div className="truncate">Gemini 3.8</div>
+            <div className="text-[9px] font-mono tracking-wider opacity-60">Live WebSocket</div>
           </button>
           
           <button

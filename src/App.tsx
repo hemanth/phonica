@@ -69,6 +69,7 @@ export const App: React.FC = () => {
   const [openAIKey, setOpenAIKey] = useState<string>(() => localStorage.getItem('openai_api_key') || (import.meta as any).env?.VITE_OPENAI_API_KEY || '');
   const [geminiVoice, setGeminiVoice] = useState<string>(() => localStorage.getItem('gemini_voice') || 'Puck');
   const [openAIVoice, setOpenAIVoice] = useState<string>(() => localStorage.getItem('openai_voice') || 'alloy');
+  const [geminiModel, setGeminiModel] = useState<string>(() => localStorage.getItem('gemini_model') || 'models/gemini-3.8-live');
   
   // Spoken Coaching Stream Language (defaults strictly to EN_US)
   const [coachingLanguage, setCoachingLanguage] = useState<string>(() => localStorage.getItem('coaching_language') || 'EN_US');
@@ -128,11 +129,15 @@ export const App: React.FC = () => {
   const currentLanguage: Language = LANGUAGES.find(l => l.id === currentWord.languageId) || LANGUAGES[0];
 
   // Save credentials
-  const handleSaveKeys = (newGemKey: string, newOaKey: string, newGVoice: string, newOVoice: string) => {
+  const handleSaveKeys = (newGemKey: string, newOaKey: string, newGVoice: string, newOVoice: string, newGModel?: string) => {
     setGeminiKey(newGemKey);
     setOpenAIKey(newOaKey);
     setGeminiVoice(newGVoice);
     setOpenAIVoice(newOVoice);
+    if (newGModel) {
+      setGeminiModel(newGModel);
+      localStorage.setItem('gemini_model', newGModel);
+    }
     localStorage.setItem('gemini_api_key', newGemKey);
     localStorage.setItem('openai_api_key', newOaKey);
     localStorage.setItem('gemini_voice', newGVoice);
@@ -287,6 +292,7 @@ export const App: React.FC = () => {
 
       const client = new GeminiLiveClient({
         apiKey: geminiKey,
+        model: geminiModel,
         voiceName: geminiVoice,
         coachingLanguage: coachingLangObj.name,
         onStatusChange: (status) => setLiveStatus(status),
@@ -935,6 +941,7 @@ export const App: React.FC = () => {
         openAIKey={openAIKey}
         geminiVoice={geminiVoice}
         openAIVoice={openAIVoice}
+        geminiModel={geminiModel}
         onSaveKeys={handleSaveKeys}
         onClose={() => setIsKeyModalOpen(false)}
       />
