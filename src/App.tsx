@@ -414,9 +414,19 @@ export const App: React.FC = () => {
         return;
       }
 
-      // 2. If OpenAI key is configured, synthesize spoken feedback via OpenAI LLM Audio Voice
-      if (openAIKey) {
-        await LLMAudioService.speakWithLLM(speechText, {
+      // 2. If Gemini key is configured and engine is Gemini, synthesize spoken feedback via Gemini Neural Voice
+      if (geminiKey && (engine === 'gemini' || !openAIKey)) {
+        await LLMAudioService.speakWithGemini(
+          speechText,
+          geminiKey,
+          geminiVoice || 'Puck',
+          'English'
+        );
+        setIsPlayingAdvice(false);
+        return;
+      } else if (openAIKey) {
+        // Synthesize spoken feedback via OpenAI Audio Speech
+        await LLMAudioService.speakWithOpenAI(speechText, {
           apiKey: openAIKey,
           voice: openAIVoice || 'alloy',
           speed: 1.0,
@@ -444,24 +454,41 @@ export const App: React.FC = () => {
     } finally {
       setIsPlayingAdvice(false);
     }
-  }, [engine, liveStatus, currentWord.word, openAIKey, openAIVoice]);
+  }, [engine, liveStatus, currentWord.word, openAIKey, openAIVoice, geminiKey, geminiVoice]);
 
-  // Play Native Speech - Uses LLM if key is available!
+  // Play Native Speech - Uses live coach modeling or Neural TTS!
   const handlePlayNative = async () => {
     setIsPlayingAudio(true);
     try {
-      // If OpenAI WebRTC coach is already live, ask the coach to model the word directly
+      // If Gemini 3.8 Live coach is already live, ask the coach to model the word directly
       if (
+        engine === 'gemini' &&
+        geminiClientRef.current &&
+        (liveStatus === 'connected' || liveStatus === 'speaking' || liveStatus === 'listening')
+      ) {
+        geminiClientRef.current.sendPrompt(
+          `Pronounce the word "${currentWord.word}" authentically in native ${currentLanguage.name}. Speak only the word clearly with native accent, then pause.`
+        );
+      } else if (
         engine === 'openai' &&
         openAIClientRef.current &&
         (liveStatus === 'connected' || liveStatus === 'speaking' || liveStatus === 'listening')
       ) {
+        // If OpenAI WebRTC coach is already live, ask the coach to model the word directly
         openAIClientRef.current.sendPrompt(
           `Pronounce the word "${currentWord.word}" authentically in native ${currentLanguage.name}. Speak only the word clearly and naturally with perfect accent, then pause.`
         );
+      } else if (geminiKey && (engine === 'gemini' || !openAIKey)) {
+        // Use Gemini Neural Audio Speech
+        await LLMAudioService.speakWithGemini(
+          currentWord.word,
+          geminiKey,
+          geminiVoice || 'Puck',
+          currentLanguage.name
+        );
       } else if (openAIKey) {
         // Use OpenAI LLM Audio Speech model
-        await LLMAudioService.speakWithLLM(currentWord.word, {
+        await LLMAudioService.speakWithOpenAI(currentWord.word, {
           apiKey: openAIKey,
           voice: openAIVoice,
           speed: 1.0,
@@ -479,11 +506,19 @@ export const App: React.FC = () => {
     }
   };
 
-  // Play Slow-Motion Speech - Uses LLM at 0.7x if key is available!
+  // Play Slow-Motion Speech - Uses live coach modeling or Neural TTS at slow speed!
   const handlePlaySlow = async () => {
     setIsPlayingAudio(true);
     try {
       if (
+        engine === 'gemini' &&
+        geminiClientRef.current &&
+        (liveStatus === 'connected' || liveStatus === 'speaking' || liveStatus === 'listening')
+      ) {
+        geminiClientRef.current.sendPrompt(
+          `Pronounce the word "${currentWord.word}" slowly at 0.7x speed in native ${currentLanguage.name}, clearly separating each syllable and phoneme, then pause.`
+        );
+      } else if (
         engine === 'openai' &&
         openAIClientRef.current &&
         (liveStatus === 'connected' || liveStatus === 'speaking' || liveStatus === 'listening')
@@ -491,8 +526,15 @@ export const App: React.FC = () => {
         openAIClientRef.current.sendPrompt(
           `Pronounce the word "${currentWord.word}" slowly at 0.7x speed in native ${currentLanguage.name}, clearly separating each phoneme.`
         );
+      } else if (geminiKey && (engine === 'gemini' || !openAIKey)) {
+        await LLMAudioService.speakWithGemini(
+          `Pronounce "${currentWord.word}" slowly in ${currentLanguage.name}, enunciating each syllable clearly`,
+          geminiKey,
+          geminiVoice || 'Puck',
+          currentLanguage.name
+        );
       } else if (openAIKey) {
-        await LLMAudioService.speakWithLLM(currentWord.word, {
+        await LLMAudioService.speakWithOpenAI(currentWord.word, {
           apiKey: openAIKey,
           voice: openAIVoice,
           speed: 0.7,
@@ -513,8 +555,15 @@ export const App: React.FC = () => {
   const handlePlaySyllable = async (syllable: string) => {
     setIsPlayingAudio(true);
     try {
-      if (openAIKey) {
-        await LLMAudioService.speakWithLLM(syllable, {
+      if (geminiKey && (engine === 'gemini' || !openAIKey)) {
+        await LLMAudioService.speakWithGemini(
+          syllable,
+          geminiKey,
+          geminiVoice || 'Puck',
+          currentLanguage.name
+        );
+      } else if (openAIKey) {
+        await LLMAudioService.speakWithOpenAI(syllable, {
           apiKey: openAIKey,
           voice: openAIVoice,
           speed: 0.85,
