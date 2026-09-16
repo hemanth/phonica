@@ -37,7 +37,12 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   const [oaKey, setOaKey] = useState(openAIKey);
   const [gVoice, setGVoice] = useState(geminiVoice);
   const [oVoice, setOVoice] = useState(openAIVoice);
-  const [gModel, setGModel] = useState(geminiModel || 'models/gemini-3.8-live');
+  const [gModel, setGModel] = useState(() => {
+    if (geminiModel && geminiModel.startsWith('models/gemini-3.8-live')) {
+      return geminiModel;
+    }
+    return 'models/gemini-3.8-live';
+  });
   const [showGKey, setShowGKey] = useState(false);
   const [showOaKey, setShowOaKey] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -222,7 +227,6 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               >
                 <option value="models/gemini-3.8-live">Gemini 3.8 Live (Fast &amp; Fluid)</option>
                 <option value="models/gemini-3.8-live-extended-thinking">Gemini 3.8 Live Extended Thinking</option>
-                <option value="models/gemini-2.5-flash">Gemini 2.5 Flash</option>
               </select>
             </div>
           </div>

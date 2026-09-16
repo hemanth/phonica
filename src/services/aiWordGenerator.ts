@@ -80,7 +80,7 @@ Respond ONLY with a JSON object in this exact schema (no markdown, no backticks,
     targetDifficulty: WordDifficulty,
     apiKey: string
   ): Promise<WordItem | null> {
-    const models = ['gemini-3.8-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-exp'];
+    const models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     let lastError: any = null;
 
     for (const model of models) {

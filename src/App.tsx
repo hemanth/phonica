@@ -69,7 +69,14 @@ export const App: React.FC = () => {
   const [openAIKey, setOpenAIKey] = useState<string>(() => localStorage.getItem('openai_api_key') || (import.meta as any).env?.VITE_OPENAI_API_KEY || '');
   const [geminiVoice, setGeminiVoice] = useState<string>(() => localStorage.getItem('gemini_voice') || 'Puck');
   const [openAIVoice, setOpenAIVoice] = useState<string>(() => localStorage.getItem('openai_voice') || 'alloy');
-  const [geminiModel, setGeminiModel] = useState<string>(() => localStorage.getItem('gemini_model') || 'models/gemini-3.8-live');
+  const [geminiModel, setGeminiModel] = useState<string>(() => {
+    const saved = localStorage.getItem('gemini_model');
+    if (!saved || !saved.startsWith('models/gemini-3.8-live')) {
+      localStorage.setItem('gemini_model', 'models/gemini-3.8-live');
+      return 'models/gemini-3.8-live';
+    }
+    return saved;
+  });
   
   // Spoken Coaching Stream Language (defaults strictly to EN_US)
   const [coachingLanguage, setCoachingLanguage] = useState<string>(() => localStorage.getItem('coaching_language') || 'EN_US');
@@ -130,21 +137,24 @@ export const App: React.FC = () => {
 
   // Save credentials
   const handleSaveKeys = (newGemKey: string, newOaKey: string, newGVoice: string, newOVoice: string, newGModel?: string) => {
-    setGeminiKey(newGemKey);
-    setOpenAIKey(newOaKey);
+    const cleanGemKey = (newGemKey || '').trim();
+    const cleanOaKey = (newOaKey || '').trim();
+    const cleanGModel = (newGModel && newGModel.startsWith('models/gemini-3.8-live')) ? newGModel : 'models/gemini-3.8-live';
+
+    setGeminiKey(cleanGemKey);
+    setOpenAIKey(cleanOaKey);
     setGeminiVoice(newGVoice);
     setOpenAIVoice(newOVoice);
-    if (newGModel) {
-      setGeminiModel(newGModel);
-      localStorage.setItem('gemini_model', newGModel);
-    }
-    localStorage.setItem('gemini_api_key', newGemKey);
-    localStorage.setItem('openai_api_key', newOaKey);
+    setGeminiModel(cleanGModel);
+
+    localStorage.setItem('gemini_api_key', cleanGemKey);
+    localStorage.setItem('openai_api_key', cleanOaKey);
     localStorage.setItem('gemini_voice', newGVoice);
     localStorage.setItem('openai_voice', newOVoice);
+    localStorage.setItem('gemini_model', cleanGModel);
 
     // If OpenAI key is added, seamlessly switch engine to OpenAI GPT-Live-1 WebRTC
-    if (newOaKey) {
+    if (cleanOaKey && !openAIKey) {
       setEngine('openai');
       localStorage.setItem('selected_engine', 'openai');
     }

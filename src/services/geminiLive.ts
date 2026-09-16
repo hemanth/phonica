@@ -21,6 +21,8 @@ export class GeminiLiveClient {
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private outputAudioTime: number = 0;
   private isConnected: boolean = false;
+  private isSetupComplete: boolean = false;
+  private pendingInitialPrompt: string | null = null;
   private options: GeminiLiveOptions;
 
   constructor(options: GeminiLiveOptions) {
@@ -28,36 +30,51 @@ export class GeminiLiveClient {
   }
 
   async connect(initialPrompt?: string) {
-    if (!this.options.apiKey) {
+    const rawApiKey = this.options.apiKey ? this.options.apiKey.trim() : '';
+    if (!rawApiKey) {
       this.options.onError?.('Gemini API Key is required.');
       return;
     }
 
     try {
       this.options.onStatusChange?.('connecting');
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(this.options.apiKey)}`;
+      this.isSetupComplete = false;
+      this.pendingInitialPrompt = initialPrompt || null;
+
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(rawApiKey)}`;
       
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
         this.isConnected = true;
-        this.options.onStatusChange?.('connected');
 
-        // Send Setup frame for Gemini 3.8 Live
-        const targetModel = this.options.model || 'models/gemini-3.8-live';
+        // Determine validated target model
+        let targetModel = (this.options.model || 'models/gemini-3.8-live').trim();
+        if (!targetModel.startsWith('models/gemini-3.8-live')) {
+          targetModel = 'models/gemini-3.8-live';
+        }
+
+        const generationConfig: any = {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: this.options.voiceName || 'Puck'
+              }
+            }
+          }
+        };
+
+        if (targetModel.includes('extended-thinking')) {
+          generationConfig.thinkingConfig = {
+            thinkingLevel: 'HIGH'
+          };
+        }
+
         const setupMessage = {
           setup: {
             model: targetModel,
-            generationConfig: {
-              responseModalities: ['AUDIO'],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: this.options.voiceName || 'Puck'
-                  }
-                }
-              }
-            },
+            generationConfig,
             systemInstruction: {
               parts: [
                 {
@@ -75,13 +92,6 @@ Keep responses concise, conversational, and rhythmically spoken.`
         };
 
         this.ws?.send(JSON.stringify(setupMessage));
-
-        if (initialPrompt) {
-          this.sendPrompt(initialPrompt);
-        }
-
-        // Start microphone
-        this.startMicrophone();
       };
 
       this.ws.onmessage = async (event: MessageEvent) => {
@@ -95,6 +105,21 @@ Keep responses concise, conversational, and rhythmically spoken.`
           }
 
           if (!data) return;
+
+          // Handle server setup complete
+          if (data.setupComplete) {
+            this.isSetupComplete = true;
+            this.options.onStatusChange?.('connected');
+
+            if (this.pendingInitialPrompt) {
+              const prompt = this.pendingInitialPrompt;
+              this.pendingInitialPrompt = null;
+              this.sendPrompt(prompt);
+            }
+
+            // Start microphone stream only after setup is acknowledged
+            this.startMicrophone();
+          }
 
           // Process server turn
           if (data.serverContent?.modelTurn?.parts) {
@@ -122,14 +147,21 @@ Keep responses concise, conversational, and rhythmically spoken.`
 
       this.ws.onerror = (e) => {
         console.error('Gemini Live WebSocket error', e);
-        this.options.onError?.('Gemini Live WebSocket encountered a connection error. Check your API key or network.');
-        this.options.onStatusChange?.('error');
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event: CloseEvent) => {
         this.isConnected = false;
+        this.isSetupComplete = false;
         this.cleanupAudio();
-        this.options.onStatusChange?.('idle');
+
+        if (event.code !== 1000 && event.code !== 1005) {
+          const reasonMsg = event.reason ? `: ${event.reason}` : ` (code ${event.code})`;
+          console.warn(`Gemini Live WebSocket closed${reasonMsg}`);
+          this.options.onError?.(`Gemini Live closed${reasonMsg}. Check your API key or model configuration.`);
+          this.options.onStatusChange?.('error');
+        } else {
+          this.options.onStatusChange?.('idle');
+        }
       };
 
     } catch (err: any) {
@@ -157,7 +189,7 @@ Keep responses concise, conversational, and rhythmically spoken.`
       this.sourceNode = this.audioCtx.createMediaStreamSource(this.mediaStream);
       
       const processAudioChunk = (inputData: Float32Array) => {
-        if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (!this.isConnected || !this.isSetupComplete || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
         // Calculate audio RMS for visualizer
         let sum = 0;
@@ -311,7 +343,10 @@ registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
   }
 
   sendPrompt(text: string) {
-    if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSetupComplete) {
+      this.pendingInitialPrompt = text;
+      return;
+    }
     this.options.onTranscript?.('user', text);
     const clientContent = {
       clientContent: {
@@ -328,8 +363,12 @@ registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
   }
 
   disconnect() {
+    this.isSetupComplete = false;
+    this.pendingInitialPrompt = null;
     if (this.ws) {
-      this.ws.close();
+      try {
+        this.ws.close(1000, 'Client disconnected');
+      } catch (e) {}
       this.ws = null;
     }
     this.cleanupAudio();
