@@ -156,7 +156,11 @@ test.describe('Phonica E2E Test Suite', () => {
   test('9. Generate real audio via Gemini API and verify audio synthesis', async ({ page }) => {
     await page.goto('/#studio');
 
-    const geminiKey = process.env.VITE_GEMINI_API_KEY || 'AIzaSyDSwVL2KGI3XthQ-rLs5L4k01q3v90PDgk';
+    const geminiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+    if (!geminiKey) {
+      test.skip(!geminiKey, 'VITE_GEMINI_API_KEY not set');
+      return;
+    }
     await page.evaluate((key) => {
       localStorage.setItem('gemini_api_key', key);
       localStorage.setItem('selected_engine', 'gemini');
