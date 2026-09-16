@@ -50,8 +50,25 @@ export class GeminiLiveClient {
       this.pendingInitialPrompt = initialPrompt || null;
       this.currentAssistantTranscript = '';
 
+      // 1. PRIME & UNLOCK AUDIO CONTEXTS IMMEDIATELY IN DIRECT USER GESTURE CONTEXT
+      this.inputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (this.inputAudioCtx.state === 'suspended') {
+        await this.inputAudioCtx.resume();
+      }
+
+      this.outputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 24000
+      });
+      if (this.outputAudioCtx.state === 'suspended') {
+        await this.outputAudioCtx.resume();
+      }
+      this.outputAudioTime = this.outputAudioCtx.currentTime;
+
+      // 2. Prepare microphone hardware while user gesture is active
+      await this.startMicrophone();
+
+      // 3. Connect WebSocket to Google Gemini Bidi endpoint
       const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(rawApiKey)}`;
-      
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
@@ -119,9 +136,6 @@ Keep responses concise, conversational, and rhythmically spoken.`
           if (data.setupComplete) {
             this.isSetupComplete = true;
             this.options.onStatusChange?.('connected');
-
-            // Start microphone stream as soon as setup completes
-            await this.startMicrophone();
 
             // Send initial conversational prompt if provided
             if (this.pendingInitialPrompt) {
@@ -264,7 +278,9 @@ Keep responses concise, conversational, and rhythmically spoken.`
 
   private async startMicrophone() {
     try {
-      this.inputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (!this.inputAudioCtx || this.inputAudioCtx.state === 'closed') {
+        this.inputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
       if (this.inputAudioCtx.state === 'suspended') {
         await this.inputAudioCtx.resume();
       }
@@ -328,8 +344,10 @@ Keep responses concise, conversational, and rhythmically spoken.`
         this.ws.send(JSON.stringify(realTimeMessage));
       };
 
+      let workletReady = false;
       if (this.inputAudioCtx.audioWorklet) {
-        const workletCode = `
+        try {
+          const workletCode = `
 class GeminiAudioProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -353,26 +371,33 @@ class GeminiAudioProcessor extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
+try {
+  registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
+} catch (e) {}
 `;
-        const blob = new Blob([workletCode], { type: 'application/javascript' });
-        const workletUrl = URL.createObjectURL(blob);
-        await this.inputAudioCtx.audioWorklet.addModule(workletUrl);
-        URL.revokeObjectURL(workletUrl);
+          const blob = new Blob([workletCode], { type: 'application/javascript' });
+          const workletUrl = URL.createObjectURL(blob);
+          await this.inputAudioCtx.audioWorklet.addModule(workletUrl);
 
-        this.workletNode = new AudioWorkletNode(this.inputAudioCtx, 'gemini-audio-processor');
-        this.workletNode.port.onmessage = (event) => {
-          processAudioChunk(event.data);
-        };
+          this.workletNode = new AudioWorkletNode(this.inputAudioCtx, 'gemini-audio-processor');
+          this.workletNode.port.onmessage = (event) => {
+            processAudioChunk(event.data);
+          };
 
-        this.silentGain = this.inputAudioCtx.createGain();
-        this.silentGain.gain.value = 0;
+          this.silentGain = this.inputAudioCtx.createGain();
+          this.silentGain.gain.value = 0;
 
-        this.sourceNode.connect(this.workletNode);
-        this.workletNode.connect(this.silentGain);
-        this.silentGain.connect(this.inputAudioCtx.destination);
-      } else {
-        // Fallback for legacy browser environments without AudioWorklet
+          this.sourceNode.connect(this.workletNode);
+          this.workletNode.connect(this.silentGain);
+          this.silentGain.connect(this.inputAudioCtx.destination);
+          workletReady = true;
+        } catch (workletErr) {
+          console.warn('AudioWorklet setup failed, falling back to ScriptProcessor', workletErr);
+          workletReady = false;
+        }
+      }
+
+      if (!workletReady) {
         this.scriptProcessor = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
         this.scriptProcessor.onaudioprocess = (e) => {
           processAudioChunk(e.inputBuffer.getChannelData(0));
