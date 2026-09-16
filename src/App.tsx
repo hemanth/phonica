@@ -78,8 +78,8 @@ export const App: React.FC = () => {
     return saved;
   });
   
-  // Spoken Coaching Stream Language (defaults strictly to EN_US)
-  const [coachingLanguage, setCoachingLanguage] = useState<string>(() => localStorage.getItem('coaching_language') || 'EN_US');
+  // Spoken Coaching Stream Language (defaults to AUTO to match the word on screen)
+  const [coachingLanguage, setCoachingLanguage] = useState<string>(() => localStorage.getItem('coaching_language') || 'AUTO');
   
   // App State: Default to OpenAI GPT-Live-1 WebRTC whenever key is set or by default
   const [engine, setEngine] = useState<LiveEngine>(() => {
@@ -134,6 +134,15 @@ export const App: React.FC = () => {
 
   // Current Language Object
   const currentLanguage: Language = LANGUAGES.find(l => l.id === currentWord.languageId) || LANGUAGES[0];
+
+  // Effective Coaching Language: Dynamically matches currentLanguage when set to 'AUTO'
+  const effectiveCoachingLanguageName = useMemo(() => {
+    if (coachingLanguage === 'AUTO') {
+      return currentLanguage.name;
+    }
+    const found = COACHING_LANGUAGES.find(c => c.id === coachingLanguage);
+    return found ? found.name : currentLanguage.name;
+  }, [coachingLanguage, currentLanguage]);
 
   // Save credentials
   const handleSaveKeys = (newGemKey: string, newOaKey: string, newGVoice: string, newOVoice: string, newGModel?: string) => {
@@ -195,7 +204,9 @@ export const App: React.FC = () => {
       setCurrentWord(chosen);
 
       if (liveStatus === 'connected' || liveStatus === 'listening') {
-        const prompt = `I just pulled up a new word: "${chosen.word}" in ${LANGUAGES.find(l => l.id === chosen.languageId)?.name || ''}. How do I pronounce it?`;
+        const wordLang = LANGUAGES.find(l => l.id === chosen.languageId) || currentLanguage;
+        const targetCoachLang = coachingLanguage === 'AUTO' ? wordLang.name : effectiveCoachingLanguageName;
+        const prompt = `I just pulled up a new word: "${chosen.word}" in ${wordLang.name}. Please explain pronunciation tips and guidance in ${targetCoachLang} while modeling the word.`;
         sendPromptToLiveCoach(prompt);
       }
       return;
@@ -264,10 +275,12 @@ export const App: React.FC = () => {
     setCurrentWord(chosen);
 
     if (liveStatus === 'connected' || liveStatus === 'listening') {
-      const prompt = `I just pulled up a new word: "${chosen.word}" in ${LANGUAGES.find(l => l.id === chosen.languageId)?.name || ''}. How do I pronounce it?`;
+      const wordLang = LANGUAGES.find(l => l.id === chosen.languageId) || currentLanguage;
+      const targetCoachLang = coachingLanguage === 'AUTO' ? wordLang.name : effectiveCoachingLanguageName;
+      const prompt = `I just pulled up a new word: "${chosen.word}" in ${wordLang.name}. Please explain pronunciation tips and guidance in ${targetCoachLang} while modeling the word.`;
       sendPromptToLiveCoach(prompt);
     }
-  }, [selectedLanguageId, selectedDifficulty, customWords, aiGeneratedWords, seenWordIds, currentWord.id, currentLanguage, liveStatus, geminiKey, openAIKey]);
+  }, [selectedLanguageId, selectedDifficulty, customWords, aiGeneratedWords, seenWordIds, currentWord.id, currentLanguage, liveStatus, geminiKey, openAIKey, coachingLanguage, effectiveCoachingLanguageName]);
 
   // Disconnect live voice
   const disconnectLive = useCallback(() => {
@@ -292,8 +305,6 @@ export const App: React.FC = () => {
   const connectLive = useCallback(async (initialPrompt?: string) => {
     disconnectLive();
 
-    const coachingLangObj = COACHING_LANGUAGES.find(c => c.id === coachingLanguage) || COACHING_LANGUAGES[0];
-
     if (engine === 'gemini') {
       if (!geminiKey) {
         setIsKeyModalOpen(true);
@@ -304,7 +315,7 @@ export const App: React.FC = () => {
         apiKey: geminiKey,
         model: geminiModel,
         voiceName: geminiVoice,
-        coachingLanguage: coachingLangObj.name,
+        coachingLanguage: effectiveCoachingLanguageName,
         onStatusChange: (status) => setLiveStatus(status),
         onAudioLevel: (lvl) => setAudioLevel(lvl),
         onTranscript: (role, text) => {
@@ -320,7 +331,7 @@ export const App: React.FC = () => {
       });
 
       geminiClientRef.current = client;
-      await client.connect(initialPrompt || `Hello Vocalis! I'm ready to practice pronunciation of "${currentWord.word}" in ${currentLanguage.name}. Please explain tips and guidance in ${coachingLangObj.name} while modeling the word.`);
+      await client.connect(initialPrompt || `Hello Vocalis! I'm ready to practice pronunciation of "${currentWord.word}" in ${currentLanguage.name}. Please explain tips and guidance in ${effectiveCoachingLanguageName} while modeling the word.`);
 
     } else if (engine === 'openai') {
       if (!openAIKey) {
@@ -332,7 +343,7 @@ export const App: React.FC = () => {
         apiKey: openAIKey,
         model: 'gpt-live-1',
         voiceName: openAIVoice,
-        coachingLanguage: coachingLangObj.name,
+        coachingLanguage: effectiveCoachingLanguageName,
         onStatusChange: (status) => setLiveStatus(status),
         onAudioLevel: (lvl) => setAudioLevel(lvl),
         onTranscript: (role, text) => {
@@ -348,7 +359,7 @@ export const App: React.FC = () => {
       });
 
       openAIClientRef.current = client;
-      await client.connect(initialPrompt || `Hello! Guide me in pronouncing "${currentWord.word}" in ${currentLanguage.name}. Model authentic native pronunciation and explain tricky syllables in ${coachingLangObj.name}.`);
+      await client.connect(initialPrompt || `Hello! Guide me in pronouncing "${currentWord.word}" in ${currentLanguage.name}. Model authentic native pronunciation and explain tricky syllables in ${effectiveCoachingLanguageName}.`);
 
     } else {
       // Offline Browser mode
@@ -364,7 +375,7 @@ export const App: React.FC = () => {
         }
       ]);
     }
-  }, [engine, geminiKey, openAIKey, geminiVoice, openAIVoice, currentWord, currentLanguage, disconnectLive]);
+  }, [engine, geminiKey, openAIKey, geminiVoice, openAIVoice, geminiModel, currentWord, currentLanguage, effectiveCoachingLanguageName, disconnectLive]);
 
   // Toggle Live Voice Button
   const handleToggleLive = () => {
@@ -970,8 +981,8 @@ export const App: React.FC = () => {
                         setCoachingLanguage(langId);
                         localStorage.setItem('coaching_language', langId);
                         if (liveStatus === 'connected' || liveStatus === 'listening') {
-                          const langObj = COACHING_LANGUAGES.find(c => c.id === langId);
-                          sendPromptToLiveCoach(`Please switch your explanations and coaching conversation language to ${langObj?.name || langId}.`);
+                          const targetLangName = langId === 'AUTO' ? currentLanguage.name : (COACHING_LANGUAGES.find(c => c.id === langId)?.name || langId);
+                          sendPromptToLiveCoach(`Please switch your explanations, phonetics tips, and coaching conversation language to ${targetLangName}.`);
                         }
                       }}
                       onToggleEngine={handleToggleEngine}

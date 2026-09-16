@@ -211,7 +211,10 @@ export const LiveCoachPanel: React.FC<LiveCoachPanelProps> = ({
             className="w-full sm:w-auto px-2.5 py-1 rounded-lg bg-white border border-neutral-200/90 text-[#0A0A0A] font-mono text-xs font-semibold focus:outline-none focus:border-neutral-900 shadow-[0_1px_2px_rgba(0,0,0,0.04)] cursor-pointer"
             title="Language spoken by the AI coach for explanations and feedback"
           >
-            {COACHING_LANGUAGES.map((cl) => (
+            <option value="AUTO">
+              ✨ Match Word ({selectedLanguage.name})
+            </option>
+            {COACHING_LANGUAGES.filter(cl => cl.id !== 'AUTO').map((cl) => (
               <option key={cl.id} value={cl.id}>
                 {cl.name} ({cl.id})
               </option>
