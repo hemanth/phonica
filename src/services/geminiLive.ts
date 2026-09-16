@@ -13,17 +13,25 @@ export interface GeminiLiveOptions {
 
 export class GeminiLiveClient {
   private ws: WebSocket | null = null;
-  private audioCtx: AudioContext | null = null;
+  private inputAudioCtx: AudioContext | null = null;
+  private outputAudioCtx: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private workletNode: AudioWorkletNode | null = null;
   private silentGain: GainNode | null = null;
   private scriptProcessor: ScriptProcessorNode | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private outputAudioTime: number = 0;
+  private scheduledSources: AudioBufferSourceNode[] = [];
   private isConnected: boolean = false;
   private isSetupComplete: boolean = false;
   private pendingInitialPrompt: string | null = null;
   private options: GeminiLiveOptions;
+
+  // Voice Activity Detection (VAD) for natural back-and-forth
+  private isUserSpeaking: boolean = false;
+  private speechDetectedInTurn: boolean = false;
+  private silenceTimer: any = null;
+  private currentAssistantTranscript: string = '';
 
   constructor(options: GeminiLiveOptions) {
     this.options = options;
@@ -40,6 +48,7 @@ export class GeminiLiveClient {
       this.options.onStatusChange?.('connecting');
       this.isSetupComplete = false;
       this.pendingInitialPrompt = initialPrompt || null;
+      this.currentAssistantTranscript = '';
 
       const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(rawApiKey)}`;
       
@@ -106,30 +115,33 @@ Keep responses concise, conversational, and rhythmically spoken.`
 
           if (!data) return;
 
-          // Handle server setup complete
+          // 1. Handle server setup completion
           if (data.setupComplete) {
             this.isSetupComplete = true;
             this.options.onStatusChange?.('connected');
 
+            // Start microphone stream as soon as setup completes
+            await this.startMicrophone();
+
+            // Send initial conversational prompt if provided
             if (this.pendingInitialPrompt) {
               const prompt = this.pendingInitialPrompt;
               this.pendingInitialPrompt = null;
               this.sendPrompt(prompt);
             }
-
-            // Start microphone stream only after setup is acknowledged
-            this.startMicrophone();
           }
 
-          // Process server turn
+          // 2. Handle assistant speech transcription
+          if (data.serverContent?.outputTranscription?.text) {
+            const textChunk = data.serverContent.outputTranscription.text;
+            this.currentAssistantTranscript += textChunk;
+          }
+
+          // 3. Handle model audio chunks
           if (data.serverContent?.modelTurn?.parts) {
             this.options.onStatusChange?.('speaking');
 
             for (const part of data.serverContent.modelTurn.parts) {
-              if (part.text) {
-                this.options.onTranscript?.('assistant', part.text);
-              }
-
               if (part.inlineData && part.inlineData.data) {
                 // Audio chunk received (PCM 24000Hz 16-bit little endian)
                 this.playAudioChunk(part.inlineData.data, 24000);
@@ -137,7 +149,19 @@ Keep responses concise, conversational, and rhythmically spoken.`
             }
           }
 
-          if (data.serverContent?.turnComplete || data.serverContent?.interrupted || data.serverContent?.interaction_status === 'IDLE') {
+          // 4. Handle interruption (user spoke over coach)
+          if (data.serverContent?.interrupted) {
+            this.stopAudioPlayback();
+            this.currentAssistantTranscript = '';
+            this.options.onStatusChange?.('listening');
+          }
+
+          // 5. Handle turn completion from model
+          if (data.serverContent?.turnComplete || data.serverContent?.generationComplete) {
+            if (this.currentAssistantTranscript.trim()) {
+              this.options.onTranscript?.('assistant', this.currentAssistantTranscript.trim());
+              this.currentAssistantTranscript = '';
+            }
             this.options.onStatusChange?.('listening');
           }
         } catch (e: any) {
@@ -170,28 +194,97 @@ Keep responses concise, conversational, and rhythmically spoken.`
     }
   }
 
+  /**
+   * Resamples an incoming audio buffer to 16,000 Hz using linear interpolation
+   */
+  private resampleTo16k(inputData: Float32Array, inputSampleRate: number): Float32Array {
+    if (inputSampleRate === 16000) return inputData;
+    const ratio = inputSampleRate / 16000;
+    const targetLength = Math.round(inputData.length / ratio);
+    const result = new Float32Array(targetLength);
+    for (let i = 0; i < targetLength; i++) {
+      const srcIndex = i * ratio;
+      const indexFloor = Math.floor(srcIndex);
+      const indexCeil = Math.min(inputData.length - 1, Math.ceil(srcIndex));
+      const fraction = srcIndex - indexFloor;
+      result[i] = inputData[indexFloor] * (1 - fraction) + inputData[indexCeil] * fraction;
+    }
+    return result;
+  }
+
+  /**
+   * Client-side Voice Activity Detection (VAD) for natural, conversational back-and-forth
+   */
+  private handleVoiceActivity(rms: number) {
+    const SPEECH_THRESHOLD = 0.02; // Sensible threshold for spoken voice
+    const SILENCE_DURATION_MS = 750; // 750ms of quiet after speech commits the turn
+
+    if (rms > SPEECH_THRESHOLD) {
+      this.speechDetectedInTurn = true;
+      if (!this.isUserSpeaking) {
+        this.isUserSpeaking = true;
+        this.options.onStatusChange?.('listening');
+        // Barge-in: immediately stop coach audio when user starts speaking
+        this.stopAudioPlayback();
+      }
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+      }
+    } else if (this.isUserSpeaking && this.speechDetectedInTurn) {
+      if (!this.silenceTimer) {
+        this.silenceTimer = setTimeout(() => {
+          this.commitUserTurn();
+        }, SILENCE_DURATION_MS);
+      }
+    }
+  }
+
+  /**
+   * Commits the user's speech turn to Gemini Live
+   */
+  private commitUserTurn() {
+    if (!this.isConnected || !this.isSetupComplete || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.speechDetectedInTurn) return;
+
+    this.isUserSpeaking = false;
+    this.speechDetectedInTurn = false;
+    this.silenceTimer = null;
+
+    try {
+      this.ws.send(JSON.stringify({
+        clientContent: {
+          turnComplete: true
+        }
+      }));
+    } catch (e) {
+      console.error('Error committing user speech turn', e);
+    }
+  }
+
   private async startMicrophone() {
     try {
-      this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 16000
-      });
+      this.inputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (this.inputAudioCtx.state === 'suspended') {
+        await this.inputAudioCtx.resume();
+      }
 
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
         }
       });
 
-      this.sourceNode = this.audioCtx.createMediaStreamSource(this.mediaStream);
-      
+      this.sourceNode = this.inputAudioCtx.createMediaStreamSource(this.mediaStream);
+      const actualSampleRate = this.inputAudioCtx.sampleRate;
+
       const processAudioChunk = (inputData: Float32Array) => {
         if (!this.isConnected || !this.isSetupComplete || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-        // Calculate audio RMS for visualizer
+        // Calculate audio RMS for visualizer and VAD
         let sum = 0;
         for (let i = 0; i < inputData.length; i++) {
           sum += inputData[i] * inputData[i];
@@ -199,10 +292,16 @@ Keep responses concise, conversational, and rhythmically spoken.`
         const rms = Math.sqrt(sum / inputData.length);
         this.options.onAudioLevel?.(Math.min(1, rms * 4));
 
+        // Evaluate Voice Activity Detection for conversational back-and-forth
+        this.handleVoiceActivity(rms);
+
+        // Resample input audio buffer to 16,000 Hz if hardware operates at 44.1k or 48k
+        const pcm16kData = this.resampleTo16k(inputData, actualSampleRate);
+
         // Convert Float32Array to 16-bit PCM Int16Array
-        const pcm16 = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          const s = Math.max(-1, Math.min(1, inputData[i]));
+        const pcm16 = new Int16Array(pcm16kData.length);
+        for (let i = 0; i < pcm16kData.length; i++) {
+          const s = Math.max(-1, Math.min(1, pcm16kData[i]));
           pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
         }
 
@@ -229,7 +328,7 @@ Keep responses concise, conversational, and rhythmically spoken.`
         this.ws.send(JSON.stringify(realTimeMessage));
       };
 
-      if (this.audioCtx.audioWorklet) {
+      if (this.inputAudioCtx.audioWorklet) {
         const workletCode = `
 class GeminiAudioProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -258,28 +357,28 @@ registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
 `;
         const blob = new Blob([workletCode], { type: 'application/javascript' });
         const workletUrl = URL.createObjectURL(blob);
-        await this.audioCtx.audioWorklet.addModule(workletUrl);
+        await this.inputAudioCtx.audioWorklet.addModule(workletUrl);
         URL.revokeObjectURL(workletUrl);
 
-        this.workletNode = new AudioWorkletNode(this.audioCtx, 'gemini-audio-processor');
+        this.workletNode = new AudioWorkletNode(this.inputAudioCtx, 'gemini-audio-processor');
         this.workletNode.port.onmessage = (event) => {
           processAudioChunk(event.data);
         };
 
-        this.silentGain = this.audioCtx.createGain();
+        this.silentGain = this.inputAudioCtx.createGain();
         this.silentGain.gain.value = 0;
 
         this.sourceNode.connect(this.workletNode);
         this.workletNode.connect(this.silentGain);
-        this.silentGain.connect(this.audioCtx.destination);
+        this.silentGain.connect(this.inputAudioCtx.destination);
       } else {
         // Fallback for legacy browser environments without AudioWorklet
-        this.scriptProcessor = this.audioCtx.createScriptProcessor(2048, 1, 1);
+        this.scriptProcessor = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
         this.scriptProcessor.onaudioprocess = (e) => {
           processAudioChunk(e.inputBuffer.getChannelData(0));
         };
         this.sourceNode.connect(this.scriptProcessor);
-        this.scriptProcessor.connect(this.audioCtx.destination);
+        this.scriptProcessor.connect(this.inputAudioCtx.destination);
       }
 
       this.options.onStatusChange?.('listening');
@@ -290,16 +389,27 @@ registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
     }
   }
 
+  private stopAudioPlayback() {
+    for (const src of this.scheduledSources) {
+      try {
+        src.stop();
+        src.disconnect();
+      } catch (e) {}
+    }
+    this.scheduledSources = [];
+    if (this.outputAudioCtx) {
+      this.outputAudioTime = this.outputAudioCtx.currentTime;
+    }
+  }
+
   private playAudioChunk(base64Data: string, sampleRate = 24000) {
     try {
-      if (!this.audioCtx) {
-        this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
-          sampleRate
-        });
+      if (!this.outputAudioCtx || this.outputAudioCtx.state === 'closed') {
+        this.outputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
 
-      if (this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume();
+      if (this.outputAudioCtx.state === 'suspended') {
+        this.outputAudioCtx.resume();
       }
 
       const binary = atob(base64Data);
@@ -314,10 +424,10 @@ registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
         float32Array[i] = int16Array[i] / (int16Array[i] < 0 ? 0x8000 : 0x7fff);
       }
 
-      const audioBuffer = this.audioCtx.createBuffer(1, float32Array.length, sampleRate);
+      const audioBuffer = this.outputAudioCtx.createBuffer(1, float32Array.length, sampleRate);
       audioBuffer.copyToChannel(float32Array, 0);
 
-      const bufferSource = this.audioCtx.createBufferSource();
+      const bufferSource = this.outputAudioCtx.createBufferSource();
       bufferSource.buffer = audioBuffer;
 
       // Audio level output for visualizer
@@ -328,15 +438,23 @@ registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
       const rms = Math.sqrt(sum / float32Array.length);
       this.options.onAudioLevel?.(Math.min(1, rms * 3.5));
 
-      bufferSource.connect(this.audioCtx.destination);
+      bufferSource.connect(this.outputAudioCtx.destination);
 
-      const currentTime = this.audioCtx.currentTime;
+      const currentTime = this.outputAudioCtx.currentTime;
       if (this.outputAudioTime < currentTime) {
         this.outputAudioTime = currentTime;
       }
 
       bufferSource.start(this.outputAudioTime);
       this.outputAudioTime += audioBuffer.duration;
+
+      this.scheduledSources.push(bufferSource);
+      bufferSource.onended = () => {
+        const idx = this.scheduledSources.indexOf(bufferSource);
+        if (idx !== -1) {
+          this.scheduledSources.splice(idx, 1);
+        }
+      };
     } catch (e) {
       console.error('Error playing received audio chunk', e);
     }
@@ -377,6 +495,15 @@ registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
   }
 
   private cleanupAudio() {
+    this.stopAudioPlayback();
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+    this.isUserSpeaking = false;
+    this.speechDetectedInTurn = false;
+    this.currentAssistantTranscript = '';
+
     if (this.workletNode) {
       this.workletNode.disconnect();
       this.workletNode = null;
@@ -397,11 +524,17 @@ registerProcessor('gemini-audio-processor', GeminiAudioProcessor);
       this.mediaStream.getTracks().forEach(track => track.stop());
       this.mediaStream = null;
     }
-    if (this.audioCtx && this.audioCtx.state !== 'closed') {
+    if (this.inputAudioCtx && this.inputAudioCtx.state !== 'closed') {
       try {
-        this.audioCtx.close();
+        this.inputAudioCtx.close();
       } catch (e) {}
-      this.audioCtx = null;
+      this.inputAudioCtx = null;
+    }
+    if (this.outputAudioCtx && this.outputAudioCtx.state !== 'closed') {
+      try {
+        this.outputAudioCtx.close();
+      } catch (e) {}
+      this.outputAudioCtx = null;
     }
   }
 }
