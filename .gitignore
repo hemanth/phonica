@@ -9,4 +9,6 @@ audio/
 *.mp3
 generate_voiceover.py
 master_audio.py
+test-results/
+playwright-report/
 .DS_Store

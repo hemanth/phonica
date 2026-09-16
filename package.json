@@ -8,9 +8,16 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "node server.js"
+    "server": "node server.js",
+    "test": "playwright test"
   },
-  "keywords": ["pronunciation", "gemini-live", "openai-realtime", "polyglot", "phonetics"],
+  "keywords": [
+    "pronunciation",
+    "gemini-live",
+    "openai-realtime",
+    "polyglot",
+    "phonetics"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -24,6 +31,7 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
