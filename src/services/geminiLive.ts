@@ -1,10 +1,20 @@
 import { LiveStatus } from '../types';
 
+export interface TargetWordInfo {
+  word: string;
+  language: string;
+  phonetic?: string;
+  syllables?: string[];
+  meaning?: string;
+}
+
 export interface GeminiLiveOptions {
   apiKey: string;
   model?: string;
   voiceName?: string;
   coachingLanguage?: string;
+  targetLanguage?: string;
+  targetWord?: TargetWordInfo;
   onStatusChange?: (status: LiveStatus) => void;
   onTranscript?: (role: 'user' | 'assistant', text: string) => void;
   onAudioLevel?: (level: number) => void; // 0 to 1 for visualizer
@@ -97,6 +107,11 @@ export class GeminiLiveClient {
           };
         }
 
+        const coachingLang = this.options.coachingLanguage || 'English (US)';
+        const targetLang = this.options.targetLanguage || 'English';
+        const targetWord = this.options.targetWord;
+        const isImmersion = coachingLang.toLowerCase().includes(targetLang.toLowerCase()) || targetLang.toLowerCase().includes(coachingLang.toLowerCase());
+
         const setupMessage = {
           setup: {
             model: targetModel,
@@ -104,13 +119,29 @@ export class GeminiLiveClient {
             systemInstruction: {
               parts: [
                 {
-                  text: `You are 'Vocalis', an elite polyglot pronunciation coach and phonetics maestro. 
-IMPORTANT: Always speak, explain, and deliver your coaching advice, tips, feedback, and conversational dialogue strictly in ${this.options.coachingLanguage || 'English (US)'}.
-When demonstrating or modeling practice words from world languages, pronounce the target word with authentic native phonetics, then explain mechanics in ${this.options.coachingLanguage || 'English (US)'}.
-Be warm, vibrant, encouraging, and razor-sharp with phonetics.
-Break down tricky consonants, vowel roundings, lip and tongue placement.
-When the user speaks or repeats a word, evaluate their pronunciation with precision, praise what they nailed, and gently guide the specific syllable that needs adjusting.
-Keep responses concise, conversational, and rhythmically spoken.`
+                  text: `You are 'Vocalis', an elite polyglot pronunciation coach and phonetics maestro.
+You maintain a consistent vocal persona (${this.options.voiceName || 'Puck'}), but you have absolute linguistic awareness of which language you are speaking and coaching in at every moment.
+
+SESSION LINGUISTIC CONTEXT:
+- ACTIVE SPOKEN COACHING LANGUAGE: ${coachingLang}
+- TARGET PRACTICE LANGUAGE: ${targetLang}
+${targetWord ? `- ACTIVE WORD ON SCREEN: "${targetWord.word}" (IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
+
+CRITICAL RULES FOR LANGUAGE AWARENESS:
+1. ALWAYS KNOW WHICH LANGUAGE YOU ARE SPEAKING:
+   - Your primary conversational, explanatory, and feedback language is strictly ${coachingLang}.
+   - Greet the user, converse, and deliver phonetic advice in ${coachingLang}.
+   - Never accidentally respond in English if ${coachingLang} is not English (e.g. French, German, Spanish, Japanese)!
+   ${isImmersion ? `- FULL IMMERSION MODE ACTIVE: Converse, explain, and coach 100% in ${coachingLang} as an authentic native speaker.` : `- BILINGUAL MODE: Deliver all explanations, mouth mechanics, and coaching feedback in ${coachingLang}. When modeling the word "${targetWord ? targetWord.word : 'target word'}", pronounce it with authentic native ${targetLang} phonetics.`}
+
+2. ACOUSTIC & PHONETIC COACHING:
+   - When the user repeats the word or speaks, listen attentively.
+   - Acknowledge what phonemes/syllables they nailed with encouraging precision.
+   - Gently guide any syllable that needs adjusting with practical tongue/lip placement tips.
+
+3. CONVERSATIONAL & SPOKEN-FIRST:
+   - Keep answers natural, lively, and rhythmically spoken (2-3 sentences max per turn).
+   - Do not output emojis or formatting in audio turns.`
                 }
               ]
             }
@@ -485,12 +516,24 @@ try {
     }
   }
 
-  sendPrompt(text: string) {
+  updateContext(params: {
+    coachingLanguage?: string;
+    targetLanguage?: string;
+    targetWord?: TargetWordInfo;
+  }) {
+    if (params.coachingLanguage) this.options.coachingLanguage = params.coachingLanguage;
+    if (params.targetLanguage) this.options.targetLanguage = params.targetLanguage;
+    if (params.targetWord) this.options.targetWord = params.targetWord;
+  }
+
+  sendPrompt(text: string, displayTranscript?: string | false) {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSetupComplete) {
       this.pendingInitialPrompt = text;
       return;
     }
-    this.options.onTranscript?.('user', text);
+    if (displayTranscript !== false) {
+      this.options.onTranscript?.('user', displayTranscript !== undefined ? displayTranscript : text);
+    }
     const clientContent = {
       clientContent: {
         turns: [

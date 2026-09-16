@@ -1,10 +1,14 @@
 import { LiveStatus } from '../types';
 
+import { TargetWordInfo } from './geminiLive';
+
 export interface OpenAILiveOptions {
   apiKey: string;
   model?: string;
   voiceName?: string;
   coachingLanguage?: string;
+  targetLanguage?: string;
+  targetWord?: TargetWordInfo;
   onStatusChange?: (status: LiveStatus) => void;
   onTranscript?: (role: 'user' | 'assistant', text: string) => void;
   onAudioLevel?: (level: number) => void;
@@ -150,11 +154,31 @@ export class OpenAILiveClient {
     if (!sdp) throw new Error('Missing local SDP offer');
 
     const coachingLang = this.options.coachingLanguage || 'English (US)';
+    const targetLang = this.options.targetLanguage || 'English';
+    const targetWord = this.options.targetWord;
+    const isImmersion = coachingLang.toLowerCase().includes(targetLang.toLowerCase()) || targetLang.toLowerCase().includes(coachingLang.toLowerCase());
+
     const instructions = `You are 'Vocalis', an elite polyglot pronunciation coach and phonetics maestro.
-IMPORTANT: You MUST communicate with the user, provide all explanations, guidance, corrections, and coaching conversation strictly in ${coachingLang}.
-When modeling words from other world languages, pronounce the target word with razor-sharp authentic native phonetics, then explain mechanics in ${coachingLang}.
-Focus on exact mouth/tongue mechanics, accent inflections, and syllable stress.
-Keep answers spoken, warm, concise, and lively.`;
+You maintain a consistent voice persona (${this.options.voiceName || 'alloy'}), with complete linguistic awareness of the language you are speaking and coaching in.
+
+SESSION LINGUISTIC CONTEXT:
+- ACTIVE SPOKEN COACHING LANGUAGE: ${coachingLang}
+- TARGET PRACTICE LANGUAGE: ${targetLang}
+${targetWord ? `- ACTIVE WORD ON SCREEN: "${targetWord.word}" (IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
+
+CRITICAL RULES FOR LANGUAGE AWARENESS:
+1. ALWAYS KNOW WHICH LANGUAGE YOU ARE SPEAKING:
+   - Your primary conversational, explanatory, and feedback language is strictly ${coachingLang}.
+   - Greet the user, converse, and deliver phonetic advice in ${coachingLang}.
+   ${isImmersion ? `- FULL IMMERSION MODE: Converse, explain, and coach 100% in ${coachingLang} as an authentic native speaker.` : `- BILINGUAL MODE: Deliver all explanations and feedback in ${coachingLang}, while modeling the practice word "${targetWord ? targetWord.word : 'target word'}" with authentic native ${targetLang} phonetics.`}
+
+2. ACOUSTIC & PHONETIC COACHING:
+   - Listen attentively to the user's repetitions.
+   - Acknowledge what phonemes/syllables they nailed with encouraging precision.
+   - Gently guide any syllable that needs adjusting with practical tongue/lip placement tips.
+
+3. CONVERSATIONAL & SPOKEN-FIRST:
+   - Keep answers natural, lively, and rhythmically spoken (2-3 sentences max per turn).`;
 
     const response = await fetch('/api/openai/live/sessions', {
       method: 'POST',
@@ -185,11 +209,31 @@ Keep answers spoken, warm, concise, and lively.`;
   private async connectRealtimeSession(initialPrompt?: string) {
     const targetModel = 'gpt-4o-realtime-preview';
     const coachingLang = this.options.coachingLanguage || 'English (US)';
+    const targetLang = this.options.targetLanguage || 'English';
+    const targetWord = this.options.targetWord;
+    const isImmersion = coachingLang.toLowerCase().includes(targetLang.toLowerCase()) || targetLang.toLowerCase().includes(coachingLang.toLowerCase());
+
     const instructions = `You are 'Vocalis', an elite polyglot pronunciation coach and phonetics maestro.
-IMPORTANT: You MUST communicate with the user and provide all explanations, guidance, and coaching dialogue strictly in ${coachingLang}.
-When modeling words, pronounce the target word authentically in its native language with precise phonetic accuracy.
-Focus on exact mouth/tongue mechanics, accent inflections, and syllable stress.
-Keep answers spoken, warm, concise, and lively.`;
+You maintain a consistent voice persona (${this.options.voiceName || 'alloy'}), with complete linguistic awareness of the language you are speaking and coaching in.
+
+SESSION LINGUISTIC CONTEXT:
+- ACTIVE SPOKEN COACHING LANGUAGE: ${coachingLang}
+- TARGET PRACTICE LANGUAGE: ${targetLang}
+${targetWord ? `- ACTIVE WORD ON SCREEN: "${targetWord.word}" (IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
+
+CRITICAL RULES FOR LANGUAGE AWARENESS:
+1. ALWAYS KNOW WHICH LANGUAGE YOU ARE SPEAKING:
+   - Your primary conversational, explanatory, and feedback language is strictly ${coachingLang}.
+   - Greet the user, converse, and deliver phonetic advice in ${coachingLang}.
+   ${isImmersion ? `- FULL IMMERSION MODE: Converse, explain, and coach 100% in ${coachingLang} as an authentic native speaker.` : `- BILINGUAL MODE: Deliver all explanations and feedback in ${coachingLang}, while modeling the practice word "${targetWord ? targetWord.word : 'target word'}" with authentic native ${targetLang} phonetics.`}
+
+2. ACOUSTIC & PHONETIC COACHING:
+   - Listen attentively to the user's repetitions.
+   - Acknowledge what phonemes/syllables they nailed with encouraging precision.
+   - Gently guide any syllable that needs adjusting with practical tongue/lip placement tips.
+
+3. CONVERSATIONAL & SPOKEN-FIRST:
+   - Keep answers natural, lively, and rhythmically spoken (2-3 sentences max per turn).`;
 
     let ephemeralKey = '';
     try {
@@ -399,9 +443,21 @@ Keep answers spoken, warm, concise, and lively.`,
     }
   }
 
-  sendPrompt(text: string) {
+  updateContext(params: {
+    coachingLanguage?: string;
+    targetLanguage?: string;
+    targetWord?: TargetWordInfo;
+  }) {
+    if (params.coachingLanguage) this.options.coachingLanguage = params.coachingLanguage;
+    if (params.targetLanguage) this.options.targetLanguage = params.targetLanguage;
+    if (params.targetWord) this.options.targetWord = params.targetWord;
+  }
+
+  sendPrompt(text: string, displayTranscript?: string | false) {
     if (!this.dc || this.dc.readyState !== 'open') return;
-    this.options.onTranscript?.('user', text);
+    if (displayTranscript !== false) {
+      this.options.onTranscript?.('user', displayTranscript !== undefined ? displayTranscript : text);
+    }
 
     const event = {
       type: 'conversation.item.create',

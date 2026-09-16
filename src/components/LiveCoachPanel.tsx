@@ -20,6 +20,8 @@ interface LiveCoachPanelProps {
   currentWord: WordItem;
   hasKey: boolean;
   coachingLanguage: string;
+  effectiveCoachingLanguageName?: string;
+  voiceName?: string;
   geminiModel?: string;
   onSelectCoachingLanguage: (langId: string) => void;
   onToggleEngine: (engine: LiveEngine) => void;
@@ -37,6 +39,8 @@ export const LiveCoachPanel: React.FC<LiveCoachPanelProps> = ({
   currentWord,
   hasKey,
   coachingLanguage,
+  effectiveCoachingLanguageName,
+  voiceName,
   geminiModel,
   onSelectCoachingLanguage,
   onToggleEngine,
@@ -241,13 +245,20 @@ export const LiveCoachPanel: React.FC<LiveCoachPanelProps> = ({
             </span>
           </div>
 
-          <span className="text-[10px] text-neutral-400 font-mono font-medium">
-            {engine === 'gemini' 
-              ? (geminiModel?.includes('extended-thinking') ? 'Gemini 3.8 Thinking' : 'Gemini 3.8 Live') 
-              : engine === 'openai' 
-              ? 'GPT-Live-1' 
-              : 'Web Audio'}
-          </span>
+          <div className="flex items-center gap-1.5 text-[10px] font-mono font-medium">
+            {voiceName && (
+              <span className="text-neutral-700 bg-white/90 px-1.5 py-0.5 rounded border border-neutral-200/80 shadow-[0_1px_1px_rgba(0,0,0,0.03)]" title="Strict Single Voice Persona">
+                Voice: <strong>{voiceName}</strong>
+              </span>
+            )}
+            <span className="text-neutral-400">
+              {engine === 'gemini' 
+                ? (geminiModel?.includes('extended-thinking') ? '3.8 Thinking' : '3.8 Live') 
+                : engine === 'openai' 
+                ? 'GPT-Live-1' 
+                : 'Web Audio'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -257,6 +268,11 @@ export const LiveCoachPanel: React.FC<LiveCoachPanelProps> = ({
           <span className="flex items-center gap-1.5 font-semibold text-neutral-800">
             <ChatCircleText size={14} className="text-neutral-900" />
             <span>Spoken Coaching Stream</span>
+            {effectiveCoachingLanguageName && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-200/70 text-neutral-700 font-mono font-normal">
+                Language: <strong className="font-semibold text-neutral-900">{effectiveCoachingLanguageName}</strong>
+              </span>
+            )}
           </span>
           <span className="text-[10px] text-neutral-400 font-mono">{transcripts.length} exchanges</span>
         </div>

@@ -77,7 +77,7 @@ export class LLMAudioService {
                 role: 'user',
                 parts: [
                   {
-                    text: `Pronounce "${text}" authentically in native ${languageName}. Say only the word with authentic native pronunciation, no extra text.`
+                    text: `You are an expert native speaker of ${languageName}. Pronounce the ${languageName} word "${text}" with flawless native phonetics, authentic accent, and natural cadence. Say only the word "${text}", nothing else.`
                   }
                 ]
               }
