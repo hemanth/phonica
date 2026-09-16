@@ -94,7 +94,6 @@ export interface CoachingLanguage {
 }
 
 export const COACHING_LANGUAGES: CoachingLanguage[] = [
-  { id: 'AUTO', code: 'auto', name: 'Match Word Language (Auto)', nativeName: 'Auto' },
   { id: 'EN_US', code: 'en-US', name: 'English (US)', nativeName: 'English (US)' },
   { id: 'EN_GB', code: 'en-GB', name: 'English (UK)', nativeName: 'English (UK)' },
   { id: 'ES_ES', code: 'es-ES', name: 'Spanish (Spain)', nativeName: 'Español' },

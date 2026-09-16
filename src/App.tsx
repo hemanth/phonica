@@ -79,8 +79,11 @@ export const App: React.FC = () => {
     return saved;
   });
   
-  // Spoken Coaching Stream Language (defaults to AUTO to match the word on screen)
-  const [coachingLanguage, setCoachingLanguage] = useState<string>(() => localStorage.getItem('coaching_language') || 'AUTO');
+  // Spoken Coaching Stream Language (defaults to EN_US)
+  const [coachingLanguage, setCoachingLanguage] = useState<string>(() => {
+    const saved = localStorage.getItem('coaching_language');
+    return (saved && saved !== 'AUTO') ? saved : 'EN_US';
+  });
   
   // App State: Default to OpenAI GPT-Live-1 WebRTC whenever key is set or by default
   const [engine, setEngine] = useState<LiveEngine>(() => {
@@ -136,14 +139,14 @@ export const App: React.FC = () => {
   // Current Language Object
   const currentLanguage: Language = LANGUAGES.find(l => l.id === currentWord.languageId) || LANGUAGES[0];
 
-  // Effective Coaching Language: Dynamically matches currentLanguage when set to 'AUTO'
-  const effectiveCoachingLanguageName = useMemo(() => {
-    if (coachingLanguage === 'AUTO') {
-      return currentLanguage.name;
-    }
+  // Selected Coaching Language & Locale (Strict, no auto-match)
+  const activeCoachingLang = useMemo(() => {
     const found = COACHING_LANGUAGES.find(c => c.id === coachingLanguage);
-    return found ? found.name : currentLanguage.name;
-  }, [coachingLanguage, currentLanguage]);
+    return found || COACHING_LANGUAGES[0];
+  }, [coachingLanguage]);
+
+  const effectiveCoachingLanguageName = activeCoachingLang.name;
+  const effectiveCoachingLanguageLocale = activeCoachingLang.code;
 
   // Save credentials
   const handleSaveKeys = (newGemKey: string, newOaKey: string, newGVoice: string, newOVoice: string, newGModel?: string) => {
@@ -206,32 +209,37 @@ export const App: React.FC = () => {
 
       if (liveStatus === 'connected' || liveStatus === 'listening') {
         const wordLang = LANGUAGES.find(l => l.id === chosen.languageId) || currentLanguage;
-        const targetCoachLang = coachingLanguage === 'AUTO' ? wordLang.name : effectiveCoachingLanguageName;
         
         geminiClientRef.current?.updateContext({
-          coachingLanguage: targetCoachLang,
+          coachingLanguage: effectiveCoachingLanguageName,
+          coachingLocale: effectiveCoachingLanguageLocale,
           targetLanguage: wordLang.name,
+          targetLocale: wordLang.code,
           targetWord: {
             word: chosen.word,
             language: wordLang.name,
+            locale: wordLang.code,
             phonetic: chosen.phonetic,
             syllables: chosen.syllables,
             meaning: chosen.meaning
           }
         });
         openAIClientRef.current?.updateContext({
-          coachingLanguage: targetCoachLang,
+          coachingLanguage: effectiveCoachingLanguageName,
+          coachingLocale: effectiveCoachingLanguageLocale,
           targetLanguage: wordLang.name,
+          targetLocale: wordLang.code,
           targetWord: {
             word: chosen.word,
             language: wordLang.name,
+            locale: wordLang.code,
             phonetic: chosen.phonetic,
             syllables: chosen.syllables,
             meaning: chosen.meaning
           }
         });
 
-        const prompt = getWordSwitchPrompt(chosen, wordLang, targetCoachLang);
+        const prompt = getWordSwitchPrompt(chosen, wordLang, effectiveCoachingLanguageName, effectiveCoachingLanguageLocale);
         sendPromptToLiveCoach(prompt, `Practicing: ${chosen.word} (${wordLang.name})`);
       }
       return;
@@ -271,31 +279,36 @@ export const App: React.FC = () => {
           setCurrentWord(generated);
 
           if (liveStatus === 'connected' || liveStatus === 'listening') {
-            const targetCoachLang = coachingLanguage === 'AUTO' ? targetLang.name : effectiveCoachingLanguageName;
             geminiClientRef.current?.updateContext({
-              coachingLanguage: targetCoachLang,
+              coachingLanguage: effectiveCoachingLanguageName,
+              coachingLocale: effectiveCoachingLanguageLocale,
               targetLanguage: targetLang.name,
+              targetLocale: targetLang.code,
               targetWord: {
                 word: generated.word,
                 language: targetLang.name,
+                locale: targetLang.code,
                 phonetic: generated.phonetic,
                 syllables: generated.syllables,
                 meaning: generated.meaning
               }
             });
             openAIClientRef.current?.updateContext({
-              coachingLanguage: targetCoachLang,
+              coachingLanguage: effectiveCoachingLanguageName,
+              coachingLocale: effectiveCoachingLanguageLocale,
               targetLanguage: targetLang.name,
+              targetLocale: targetLang.code,
               targetWord: {
                 word: generated.word,
                 language: targetLang.name,
+                locale: targetLang.code,
                 phonetic: generated.phonetic,
                 syllables: generated.syllables,
                 meaning: generated.meaning
               }
             });
 
-            const prompt = getWordSwitchPrompt(generated, targetLang, targetCoachLang);
+            const prompt = getWordSwitchPrompt(generated, targetLang, effectiveCoachingLanguageName, effectiveCoachingLanguageLocale);
             sendPromptToLiveCoach(prompt, `Practicing AI challenge: ${generated.word} (${targetLang.name})`);
           }
           return;
@@ -325,34 +338,39 @@ export const App: React.FC = () => {
 
     if (liveStatus === 'connected' || liveStatus === 'listening') {
       const wordLang = LANGUAGES.find(l => l.id === chosen.languageId) || currentLanguage;
-      const targetCoachLang = coachingLanguage === 'AUTO' ? wordLang.name : effectiveCoachingLanguageName;
       geminiClientRef.current?.updateContext({
-        coachingLanguage: targetCoachLang,
+        coachingLanguage: effectiveCoachingLanguageName,
+        coachingLocale: effectiveCoachingLanguageLocale,
         targetLanguage: wordLang.name,
+        targetLocale: wordLang.code,
         targetWord: {
           word: chosen.word,
           language: wordLang.name,
+          locale: wordLang.code,
           phonetic: chosen.phonetic,
           syllables: chosen.syllables,
           meaning: chosen.meaning
         }
       });
       openAIClientRef.current?.updateContext({
-        coachingLanguage: targetCoachLang,
+        coachingLanguage: effectiveCoachingLanguageName,
+        coachingLocale: effectiveCoachingLanguageLocale,
         targetLanguage: wordLang.name,
+        targetLocale: wordLang.code,
         targetWord: {
           word: chosen.word,
           language: wordLang.name,
+          locale: wordLang.code,
           phonetic: chosen.phonetic,
           syllables: chosen.syllables,
           meaning: chosen.meaning
         }
       });
 
-      const prompt = getWordSwitchPrompt(chosen, wordLang, targetCoachLang);
+      const prompt = getWordSwitchPrompt(chosen, wordLang, effectiveCoachingLanguageName, effectiveCoachingLanguageLocale);
       sendPromptToLiveCoach(prompt, `Practicing: ${chosen.word} (${wordLang.name})`);
     }
-  }, [selectedLanguageId, selectedDifficulty, customWords, aiGeneratedWords, seenWordIds, currentWord.id, currentLanguage, liveStatus, geminiKey, openAIKey, coachingLanguage, effectiveCoachingLanguageName]);
+  }, [selectedLanguageId, selectedDifficulty, customWords, aiGeneratedWords, seenWordIds, currentWord.id, currentLanguage, liveStatus, geminiKey, openAIKey, coachingLanguage, effectiveCoachingLanguageName, effectiveCoachingLanguageLocale]);
 
   // Disconnect live voice
   const disconnectLive = useCallback(() => {
@@ -388,10 +406,13 @@ export const App: React.FC = () => {
         model: geminiModel,
         voiceName: geminiVoice,
         coachingLanguage: effectiveCoachingLanguageName,
+        coachingLocale: effectiveCoachingLanguageLocale,
         targetLanguage: currentLanguage.name,
+        targetLocale: currentLanguage.code,
         targetWord: {
           word: currentWord.word,
           language: currentLanguage.name,
+          locale: currentLanguage.code,
           phonetic: currentWord.phonetic,
           syllables: currentWord.syllables,
           meaning: currentWord.meaning
@@ -411,7 +432,12 @@ export const App: React.FC = () => {
       });
 
       geminiClientRef.current = client;
-      const initialGreeting = initialPrompt || getInitialCoachPrompt(currentWord, currentLanguage, effectiveCoachingLanguageName);
+      const initialGreeting = initialPrompt || getInitialCoachPrompt(
+        currentWord,
+        currentLanguage,
+        effectiveCoachingLanguageName,
+        effectiveCoachingLanguageLocale
+      );
       await client.connect(initialGreeting);
 
     } else if (engine === 'openai') {
@@ -425,10 +451,13 @@ export const App: React.FC = () => {
         model: 'gpt-live-1',
         voiceName: openAIVoice,
         coachingLanguage: effectiveCoachingLanguageName,
+        coachingLocale: effectiveCoachingLanguageLocale,
         targetLanguage: currentLanguage.name,
+        targetLocale: currentLanguage.code,
         targetWord: {
           word: currentWord.word,
           language: currentLanguage.name,
+          locale: currentLanguage.code,
           phonetic: currentWord.phonetic,
           syllables: currentWord.syllables,
           meaning: currentWord.meaning
@@ -448,7 +477,12 @@ export const App: React.FC = () => {
       });
 
       openAIClientRef.current = client;
-      const initialGreeting = initialPrompt || getInitialCoachPrompt(currentWord, currentLanguage, effectiveCoachingLanguageName);
+      const initialGreeting = initialPrompt || getInitialCoachPrompt(
+        currentWord,
+        currentLanguage,
+        effectiveCoachingLanguageName,
+        effectiveCoachingLanguageLocale
+      );
       await client.connect(initialGreeting);
 
     } else {
@@ -1076,11 +1110,21 @@ export const App: React.FC = () => {
                       onSelectCoachingLanguage={(langId) => {
                         setCoachingLanguage(langId);
                         localStorage.setItem('coaching_language', langId);
-                        const targetLangName = langId === 'AUTO' ? currentLanguage.name : (COACHING_LANGUAGES.find(c => c.id === langId)?.name || langId);
+                        const targetCoachLang = COACHING_LANGUAGES.find(c => c.id === langId) || COACHING_LANGUAGES[0];
+                        const targetLangName = targetCoachLang.name;
+                        const targetCoachLocale = targetCoachLang.code;
                         if (liveStatus === 'connected' || liveStatus === 'listening') {
-                          geminiClientRef.current?.updateContext({ coachingLanguage: targetLangName });
-                          openAIClientRef.current?.updateContext({ coachingLanguage: targetLangName });
-                          const prompt = getLanguageSwitchPrompt(targetLangName, currentWord, currentLanguage);
+                          geminiClientRef.current?.updateContext({
+                            coachingLanguage: targetLangName,
+                            coachingLocale: targetCoachLocale,
+                            targetLocale: currentLanguage.code
+                          });
+                          openAIClientRef.current?.updateContext({
+                            coachingLanguage: targetLangName,
+                            coachingLocale: targetCoachLocale,
+                            targetLocale: currentLanguage.code
+                          });
+                          const prompt = getLanguageSwitchPrompt(targetLangName, targetCoachLocale, currentWord, currentLanguage);
                           sendPromptToLiveCoach(prompt, `Switched coaching language to ${targetLangName}`);
                         }
                       }}

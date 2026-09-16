@@ -3,6 +3,7 @@ import { LiveStatus } from '../types';
 export interface TargetWordInfo {
   word: string;
   language: string;
+  locale?: string;
   phonetic?: string;
   syllables?: string[];
   meaning?: string;
@@ -13,7 +14,9 @@ export interface GeminiLiveOptions {
   model?: string;
   voiceName?: string;
   coachingLanguage?: string;
+  coachingLocale?: string;
   targetLanguage?: string;
+  targetLocale?: string;
   targetWord?: TargetWordInfo;
   onStatusChange?: (status: LiveStatus) => void;
   onTranscript?: (role: 'user' | 'assistant', text: string) => void;
@@ -36,11 +39,6 @@ export class GeminiLiveClient {
   private isSetupComplete: boolean = false;
   private pendingInitialPrompt: string | null = null;
   private options: GeminiLiveOptions;
-
-  // Voice Activity Detection (VAD) for natural back-and-forth
-  private isUserSpeaking: boolean = false;
-  private speechDetectedInTurn: boolean = false;
-  private silenceTimer: any = null;
   private currentAssistantTranscript: string = '';
 
   constructor(options: GeminiLiveOptions) {
@@ -77,8 +75,8 @@ export class GeminiLiveClient {
       // 2. Prepare microphone hardware while user gesture is active
       await this.startMicrophone();
 
-      // 3. Connect WebSocket to Google Gemini Bidi endpoint
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(rawApiKey)}`;
+      // 3. Connect WebSocket to Google Gemini Bidi endpoint (v1beta)
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(rawApiKey)}`;
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
@@ -90,63 +88,63 @@ export class GeminiLiveClient {
           targetModel = 'models/gemini-3.8-live';
         }
 
-        const generationConfig: any = {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: this.options.voiceName || 'Puck'
-              }
-            }
-          }
-        };
-
-        if (targetModel.includes('extended-thinking')) {
-          generationConfig.thinkingConfig = {
-            thinkingLevel: 'HIGH'
-          };
-        }
-
         const coachingLang = this.options.coachingLanguage || 'English (US)';
+        const coachingLocale = this.options.coachingLocale || 'en-US';
         const targetLang = this.options.targetLanguage || 'English';
+        const targetLocale = this.options.targetLocale || 'en-US';
         const targetWord = this.options.targetWord;
-        const isImmersion = coachingLang.toLowerCase().includes(targetLang.toLowerCase()) || targetLang.toLowerCase().includes(coachingLang.toLowerCase());
+        const voiceName = this.options.voiceName || 'Puck';
 
-        const setupMessage = {
+        const setupMessage: any = {
           setup: {
             model: targetModel,
-            generationConfig,
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName
+                  }
+                }
+              }
+            },
+            inputAudioTranscription: {},
             systemInstruction: {
               parts: [
                 {
-                  text: `You are 'Vocalis', an elite polyglot pronunciation coach and phonetics maestro.
-You maintain a consistent vocal persona (${this.options.voiceName || 'Puck'}), but you have absolute linguistic awareness of which language you are speaking and coaching in at every moment.
+                  text: `You are 'Vocalis', an elite polyglot acoustic pronunciation coach and phonetics maestro.
+You maintain a single, consistent voice persona (${voiceName}) throughout this entire session. Do not switch voice personas.
 
-SESSION LINGUISTIC CONTEXT:
-- ACTIVE SPOKEN COACHING LANGUAGE: ${coachingLang}
-- TARGET PRACTICE LANGUAGE: ${targetLang}
-${targetWord ? `- ACTIVE WORD ON SCREEN: "${targetWord.word}" (IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
+SESSION LOCALE & LINGUISTIC SPECIFICATION:
+- VOICE PERSONA: ${voiceName} (Strict Single Voice)
+- COACHING CONVERSATION LANGUAGE: ${coachingLang} (Locale: ${coachingLocale})
+- TARGET PRACTICE LANGUAGE: ${targetLang} (Locale: ${targetLocale})
+${targetWord ? `- CURRENT PRACTICE WORD: "${targetWord.word}" (Locale: ${targetLocale}, IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
 
-CRITICAL RULES FOR LANGUAGE AWARENESS:
-1. ALWAYS KNOW WHICH LANGUAGE YOU ARE SPEAKING:
-   - Your primary conversational, explanatory, and feedback language is strictly ${coachingLang}.
-   - Greet the user, converse, and deliver phonetic advice in ${coachingLang}.
-   - Never accidentally respond in English if ${coachingLang} is not English (e.g. French, German, Spanish, Japanese)!
-   ${isImmersion ? `- FULL IMMERSION MODE ACTIVE: Converse, explain, and coach 100% in ${coachingLang} as an authentic native speaker.` : `- BILINGUAL MODE: Deliver all explanations, mouth mechanics, and coaching feedback in ${coachingLang}. When modeling the word "${targetWord ? targetWord.word : 'target word'}", pronounce it with authentic native ${targetLang} phonetics.`}
-
-2. ACOUSTIC & PHONETIC COACHING:
-   - When the user repeats the word or speaks, listen attentively.
-   - Acknowledge what phonemes/syllables they nailed with encouraging precision.
-   - Gently guide any syllable that needs adjusting with practical tongue/lip placement tips.
-
-3. CONVERSATIONAL & SPOKEN-FIRST:
-   - Keep answers natural, lively, and rhythmically spoken (2-3 sentences max per turn).
-   - Do not output emojis or formatting in audio turns.`
+CRITICAL RULES:
+1. STRICT CONSISTENT VOICE & COACHING STREAM:
+   - Deliver all your spoken explanations, lip/tongue placement guidance, and conversational feedback strictly in ${coachingLang} (${coachingLocale}) using your assigned voice (${voiceName}).
+   - Never switch into a different voice persona.
+2. ACCURATE NATIVE LOCALE MODELING:
+   - When demonstrating or modeling practice words, pronounce the target word with authentic native ${targetLocale} phonetics and accent.
+   - Ground your phonetic guidance in the specific articulation rules of ${targetLocale}.
+3. ATTENTIVE LISTENING & EVALUATION:
+   - Listen attentively to the user's voice streamed through the microphone.
+   - Accurately assess whether their pronunciation matches authentic native ${targetLocale} speech.
+   - Gently isolate any mispronounced syllables and provide concrete physical guidance (tongue height, lip rounding, aspiration).
+4. CONCISE SPOKEN CADENCE:
+   - Keep answers natural, lively, and rhythmically spoken (2-3 sentences max per turn).`
                 }
               ]
             }
           }
         };
+
+        if (targetModel.includes('extended-thinking')) {
+          setupMessage.setup.generationConfig.thinkingConfig = {
+            thinkingLevel: 'HIGH'
+          };
+        }
 
         this.ws?.send(JSON.stringify(setupMessage));
       };
@@ -182,6 +180,18 @@ CRITICAL RULES FOR LANGUAGE AWARENESS:
             this.currentAssistantTranscript += textChunk;
           }
 
+          // User input audio transcription from server
+          if (data.serverContent?.inputAudioTranscription?.text) {
+            this.options.onTranscript?.('user', data.serverContent.inputAudioTranscription.text);
+          }
+          if (data.serverContent?.userTurn?.parts) {
+            for (const part of data.serverContent.userTurn.parts) {
+              if (part.text) {
+                this.options.onTranscript?.('user', part.text);
+              }
+            }
+          }
+
           // 3. Handle model audio chunks
           if (data.serverContent?.modelTurn?.parts) {
             this.options.onStatusChange?.('speaking');
@@ -190,6 +200,9 @@ CRITICAL RULES FOR LANGUAGE AWARENESS:
               if (part.inlineData && part.inlineData.data) {
                 // Audio chunk received (PCM 24000Hz 16-bit little endian)
                 this.playAudioChunk(part.inlineData.data, 24000);
+              }
+              if (part.text) {
+                this.currentAssistantTranscript += part.text;
               }
             }
           }
@@ -258,52 +271,12 @@ CRITICAL RULES FOR LANGUAGE AWARENESS:
   }
 
   /**
-   * Client-side Voice Activity Detection (VAD) for natural, conversational back-and-forth
+   * Evaluates user voice activity for barge-in audio stopping
    */
   private handleVoiceActivity(rms: number) {
-    const SPEECH_THRESHOLD = 0.02; // Sensible threshold for spoken voice
-    const SILENCE_DURATION_MS = 750; // 750ms of quiet after speech commits the turn
-
-    if (rms > SPEECH_THRESHOLD) {
-      this.speechDetectedInTurn = true;
-      if (!this.isUserSpeaking) {
-        this.isUserSpeaking = true;
-        this.options.onStatusChange?.('listening');
-        // Barge-in: immediately stop coach audio when user starts speaking
-        this.stopAudioPlayback();
-      }
-      if (this.silenceTimer) {
-        clearTimeout(this.silenceTimer);
-        this.silenceTimer = null;
-      }
-    } else if (this.isUserSpeaking && this.speechDetectedInTurn) {
-      if (!this.silenceTimer) {
-        this.silenceTimer = setTimeout(() => {
-          this.commitUserTurn();
-        }, SILENCE_DURATION_MS);
-      }
-    }
-  }
-
-  /**
-   * Commits the user's speech turn to Gemini Live
-   */
-  private commitUserTurn() {
-    if (!this.isConnected || !this.isSetupComplete || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    if (!this.speechDetectedInTurn) return;
-
-    this.isUserSpeaking = false;
-    this.speechDetectedInTurn = false;
-    this.silenceTimer = null;
-
-    try {
-      this.ws.send(JSON.stringify({
-        clientContent: {
-          turnComplete: true
-        }
-      }));
-    } catch (e) {
-      console.error('Error committing user speech turn', e);
+    if (rms > 0.05) {
+      // User spoke over assistant playback: interrupt playback immediately
+      this.stopAudioPlayback();
     }
   }
 
@@ -518,11 +491,15 @@ try {
 
   updateContext(params: {
     coachingLanguage?: string;
+    coachingLocale?: string;
     targetLanguage?: string;
+    targetLocale?: string;
     targetWord?: TargetWordInfo;
   }) {
     if (params.coachingLanguage) this.options.coachingLanguage = params.coachingLanguage;
+    if (params.coachingLocale) this.options.coachingLocale = params.coachingLocale;
     if (params.targetLanguage) this.options.targetLanguage = params.targetLanguage;
+    if (params.targetLocale) this.options.targetLocale = params.targetLocale;
     if (params.targetWord) this.options.targetWord = params.targetWord;
   }
 

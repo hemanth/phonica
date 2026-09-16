@@ -7,7 +7,9 @@ export interface OpenAILiveOptions {
   model?: string;
   voiceName?: string;
   coachingLanguage?: string;
+  coachingLocale?: string;
   targetLanguage?: string;
+  targetLocale?: string;
   targetWord?: TargetWordInfo;
   onStatusChange?: (status: LiveStatus) => void;
   onTranscript?: (role: 'user' | 'assistant', text: string) => void;
@@ -154,30 +156,33 @@ export class OpenAILiveClient {
     if (!sdp) throw new Error('Missing local SDP offer');
 
     const coachingLang = this.options.coachingLanguage || 'English (US)';
+    const coachingLocale = this.options.coachingLocale || 'en-US';
     const targetLang = this.options.targetLanguage || 'English';
+    const targetLocale = this.options.targetLocale || 'en-US';
     const targetWord = this.options.targetWord;
-    const isImmersion = coachingLang.toLowerCase().includes(targetLang.toLowerCase()) || targetLang.toLowerCase().includes(coachingLang.toLowerCase());
+    const voiceName = this.options.voiceName || 'alloy';
 
-    const instructions = `You are 'Vocalis', an elite polyglot pronunciation coach and phonetics maestro.
-You maintain a consistent voice persona (${this.options.voiceName || 'alloy'}), with complete linguistic awareness of the language you are speaking and coaching in.
+    const instructions = `You are 'Vocalis', an elite polyglot acoustic pronunciation coach and phonetics maestro.
+You maintain a single, consistent voice persona (${voiceName}) throughout this entire session. Do not switch voice personas.
 
-SESSION LINGUISTIC CONTEXT:
-- ACTIVE SPOKEN COACHING LANGUAGE: ${coachingLang}
-- TARGET PRACTICE LANGUAGE: ${targetLang}
-${targetWord ? `- ACTIVE WORD ON SCREEN: "${targetWord.word}" (IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
+SESSION LOCALE & LINGUISTIC SPECIFICATION:
+- VOICE PERSONA: ${voiceName} (Strict Single Voice)
+- COACHING CONVERSATION LANGUAGE: ${coachingLang} (Locale: ${coachingLocale})
+- TARGET PRACTICE LANGUAGE: ${targetLang} (Locale: ${targetLocale})
+${targetWord ? `- CURRENT PRACTICE WORD: "${targetWord.word}" (Locale: ${targetLocale}, IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
 
-CRITICAL RULES FOR LANGUAGE AWARENESS:
-1. ALWAYS KNOW WHICH LANGUAGE YOU ARE SPEAKING:
-   - Your primary conversational, explanatory, and feedback language is strictly ${coachingLang}.
-   - Greet the user, converse, and deliver phonetic advice in ${coachingLang}.
-   ${isImmersion ? `- FULL IMMERSION MODE: Converse, explain, and coach 100% in ${coachingLang} as an authentic native speaker.` : `- BILINGUAL MODE: Deliver all explanations and feedback in ${coachingLang}, while modeling the practice word "${targetWord ? targetWord.word : 'target word'}" with authentic native ${targetLang} phonetics.`}
-
-2. ACOUSTIC & PHONETIC COACHING:
-   - Listen attentively to the user's repetitions.
-   - Acknowledge what phonemes/syllables they nailed with encouraging precision.
-   - Gently guide any syllable that needs adjusting with practical tongue/lip placement tips.
-
-3. CONVERSATIONAL & SPOKEN-FIRST:
+CRITICAL RULES:
+1. STRICT CONSISTENT VOICE & COACHING STREAM:
+   - Deliver all your spoken explanations, lip/tongue mechanics guidance, and conversational feedback strictly in ${coachingLang} (${coachingLocale}) using your voice (${voiceName}).
+   - Never switch into a different voice persona.
+2. ACCURATE NATIVE LOCALE MODELING:
+   - When demonstrating or modeling practice words, pronounce the target word with authentic native ${targetLocale} phonetics and accent.
+   - Ground your phonetic guidance in the specific phonology and articulation rules of ${targetLocale}.
+3. ATTENTIVE ACOUSTIC EVALUATION OF USER SPEECH:
+   - Listen attentively to the user's voice input streamed via microphone.
+   - Accurately assess whether their pronunciation matches authentic native ${targetLocale} speech.
+   - Gently guide any mispronounced syllables with practical tongue/lip placement tips.
+4. CONCISE SPOKEN CADENCE:
    - Keep answers natural, lively, and rhythmically spoken (2-3 sentences max per turn).`;
 
     const response = await fetch('/api/openai/live/sessions', {
@@ -209,30 +214,33 @@ CRITICAL RULES FOR LANGUAGE AWARENESS:
   private async connectRealtimeSession(initialPrompt?: string) {
     const targetModel = 'gpt-4o-realtime-preview';
     const coachingLang = this.options.coachingLanguage || 'English (US)';
+    const coachingLocale = this.options.coachingLocale || 'en-US';
     const targetLang = this.options.targetLanguage || 'English';
+    const targetLocale = this.options.targetLocale || 'en-US';
     const targetWord = this.options.targetWord;
-    const isImmersion = coachingLang.toLowerCase().includes(targetLang.toLowerCase()) || targetLang.toLowerCase().includes(coachingLang.toLowerCase());
+    const voiceName = this.options.voiceName || 'alloy';
 
-    const instructions = `You are 'Vocalis', an elite polyglot pronunciation coach and phonetics maestro.
-You maintain a consistent voice persona (${this.options.voiceName || 'alloy'}), with complete linguistic awareness of the language you are speaking and coaching in.
+    const instructions = `You are 'Vocalis', an elite polyglot acoustic pronunciation coach and phonetics maestro.
+You maintain a single, consistent voice persona (${voiceName}) throughout this entire session. Do not switch voice personas.
 
-SESSION LINGUISTIC CONTEXT:
-- ACTIVE SPOKEN COACHING LANGUAGE: ${coachingLang}
-- TARGET PRACTICE LANGUAGE: ${targetLang}
-${targetWord ? `- ACTIVE WORD ON SCREEN: "${targetWord.word}" (IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
+SESSION LOCALE & LINGUISTIC SPECIFICATION:
+- VOICE PERSONA: ${voiceName} (Strict Single Voice)
+- COACHING CONVERSATION LANGUAGE: ${coachingLang} (Locale: ${coachingLocale})
+- TARGET PRACTICE LANGUAGE: ${targetLang} (Locale: ${targetLocale})
+${targetWord ? `- CURRENT PRACTICE WORD: "${targetWord.word}" (Locale: ${targetLocale}, IPA: ${targetWord.phonetic || 'N/A'}, Syllables: ${targetWord.syllables?.join(' · ') || targetWord.word}${targetWord.meaning ? `, Meaning: "${targetWord.meaning}"` : ''})` : ''}
 
-CRITICAL RULES FOR LANGUAGE AWARENESS:
-1. ALWAYS KNOW WHICH LANGUAGE YOU ARE SPEAKING:
-   - Your primary conversational, explanatory, and feedback language is strictly ${coachingLang}.
-   - Greet the user, converse, and deliver phonetic advice in ${coachingLang}.
-   ${isImmersion ? `- FULL IMMERSION MODE: Converse, explain, and coach 100% in ${coachingLang} as an authentic native speaker.` : `- BILINGUAL MODE: Deliver all explanations and feedback in ${coachingLang}, while modeling the practice word "${targetWord ? targetWord.word : 'target word'}" with authentic native ${targetLang} phonetics.`}
-
-2. ACOUSTIC & PHONETIC COACHING:
-   - Listen attentively to the user's repetitions.
-   - Acknowledge what phonemes/syllables they nailed with encouraging precision.
-   - Gently guide any syllable that needs adjusting with practical tongue/lip placement tips.
-
-3. CONVERSATIONAL & SPOKEN-FIRST:
+CRITICAL RULES:
+1. STRICT CONSISTENT VOICE & COACHING STREAM:
+   - Deliver all your spoken explanations, lip/tongue mechanics guidance, and conversational feedback strictly in ${coachingLang} (${coachingLocale}) using your voice (${voiceName}).
+   - Never switch into a different voice persona.
+2. ACCURATE NATIVE LOCALE MODELING:
+   - When demonstrating or modeling practice words, pronounce the target word with authentic native ${targetLocale} phonetics and accent.
+   - Ground your phonetic guidance in the specific phonology and articulation rules of ${targetLocale}.
+3. ATTENTIVE ACOUSTIC EVALUATION OF USER SPEECH:
+   - Listen attentively to the user's voice input streamed via microphone.
+   - Accurately assess whether their pronunciation matches authentic native ${targetLocale} speech.
+   - Gently guide any mispronounced syllables with practical tongue/lip placement tips.
+4. CONCISE SPOKEN CADENCE:
    - Keep answers natural, lively, and rhythmically spoken (2-3 sentences max per turn).`;
 
     let ephemeralKey = '';
@@ -443,13 +451,18 @@ Keep answers spoken, warm, concise, and lively.`,
     }
   }
 
+
   updateContext(params: {
     coachingLanguage?: string;
+    coachingLocale?: string;
     targetLanguage?: string;
+    targetLocale?: string;
     targetWord?: TargetWordInfo;
   }) {
     if (params.coachingLanguage) this.options.coachingLanguage = params.coachingLanguage;
+    if (params.coachingLocale) this.options.coachingLocale = params.coachingLocale;
     if (params.targetLanguage) this.options.targetLanguage = params.targetLanguage;
+    if (params.targetLocale) this.options.targetLocale = params.targetLocale;
     if (params.targetWord) this.options.targetWord = params.targetWord;
   }
 
